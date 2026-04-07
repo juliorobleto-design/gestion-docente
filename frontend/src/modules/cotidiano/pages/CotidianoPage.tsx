@@ -294,24 +294,29 @@ export default function CotidianoPage({
           </div>
         </div>
 
-        {/* Identity Banner: Lavender / Indigo Suave */}
+        {/* Identity Banner: Lavender / Indigo Suave - Sticky for visibility during scroll */}
         {selectedStudent && (
           <div style={{
-            background: "#f5f3ff",
+            position: "sticky",
+            top: "155px", // Positions it right below the main sticky header (84px + header height)
+            zIndex: 39,
+            background: "rgba(245, 243, 255, 0.9)",
+            backdropFilter: "blur(8px)",
             border: "1px solid #ddd6fe",
             borderRadius: "16px",
-            padding: "12px 24px",
-            marginBottom: "24px",
+            padding: "10px 24px",
+            marginBottom: "32px",
             display: "flex",
             alignItems: "center",
             gap: "12px",
-            boxShadow: "0 2px 10px rgba(79, 70, 229, 0.05)"
+            boxShadow: "0 4px 15px rgba(79, 70, 229, 0.08)",
+            transition: "all 0.2s"
           }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#4f46e5" }}></div>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Evaluando a:</span>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: "#4f46e5" }}>{selectedStudent.name}</span>
+            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#4f46e5", boxShadow: "0 0 8px rgba(79, 70, 229, 0.4)" }}></div>
+            <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Evaluando a:</span>
+            <span style={{ fontSize: "18px", fontWeight: 900, color: "#4f46e5", letterSpacing: "-0.01em" }}>{selectedStudent.name}</span>
             {selectedStudent.cedula && (
-              <span style={{ fontSize: "13px", color: "#94a3b8", fontWeight: 600 }}>({selectedStudent.cedula})</span>
+              <span style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 700, background: "#fff", padding: "2px 10px", borderRadius: "8px", marginLeft: "8px", border: "1px solid #e2e8f0" }}>{selectedStudent.cedula}</span>
             )}
           </div>
         )}

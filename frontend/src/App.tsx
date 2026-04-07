@@ -1,9 +1,10 @@
-﻿import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { supabase } from "./supabaseClient"
-import {  FileBarChart, Clock,  Users, FileText, Settings, CalendarCheck, NotebookPen, StickyNote, ScrollText, Bot, Ellipsis, Loader2, CheckCircle2, LogOut } from "lucide-react";
+import {  FileBarChart, Clock,  Users, FileText, Settings, CalendarCheck, NotebookPen, StickyNote, ScrollText, Bot, Ellipsis, Loader2, CheckCircle2, LogOut, Trash2, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
 import { getDocument, GlobalWorkerOptions, version } from "pdfjs-dist";
 import Auth from "./Auth";
+import { parseStudentsFromExcel, ImportedStudent } from "./utils/excelParser";
 import ConfiguracionPage from "./modules/configuracion/pages/ConfiguracionPage";
 import AsistenciaPage from "./modules/asistencia/pages/AsistenciaPage";
 import CotidianoPage from "./modules/cotidiano/pages/CotidianoPage";
@@ -97,6 +98,7 @@ export default function App() {
   const [newStudentGuiaName, setNewStudentGuiaName] = useState("")
   const [newStudentGuiaPhone, setNewStudentGuiaPhone] = useState("")
   const [studentSearch, setStudentSearch] = useState("")
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [newStudentMepEmail, setNewStudentMepEmail] = useState("")
   const [newParent1Phone, setNewParent1Phone] = useState("")
   const [newParent1Email, setNewParent1Email] = useState("")
@@ -115,6 +117,8 @@ export default function App() {
     const [authError, setAuthError] = useState<string | null>(null)
     const [academicPeriod, setAcademicPeriod] = useState<'semester1' | 'semester2' | 'annual'>('semester1')
     const [isGuiaConfigOpen, setIsGuiaConfigOpen] = useState(false);
+    const [studentToDelete, setStudentToDelete] = useState<any | null>(null);
+    const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
     const BLOCKED_DOMAINS = ["mep.go.cr", "go.cr"];
 
@@ -124,6 +128,16 @@ export default function App() {
 
       const checkSession = async () => {
         try {
+          // Primero revisar si hay un bypass de debug activo (solo en localhost)
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const debugSession = localStorage.getItem('gd_debug_session');
+          
+          if (isLocal && debugSession) {
+            setSession(JSON.parse(debugSession));
+            setIsAuthReady(true);
+            return;
+          }
+
           const { data: { session: activeSession } } = await supabase.auth.getSession();
           if (!mounted) return;
 
@@ -178,6 +192,26 @@ export default function App() {
         subscription.unsubscribe();
       };
     }, []);
+
+  useEffect(() => {
+    // Check if onboarding was already seen
+    if (session?.user?.id) {
+      const hasSeenOnboarding = localStorage.getItem('gd_onboarding_seen');
+      if (!hasSeenOnboarding) {
+        // Delay slightly for smooth entry and ensure DOM is ready
+        const timer = setTimeout(() => {
+          setShowOnboarding(true);
+          console.log("🚀 Onboarding triggered for user:", session.user.email);
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [session?.user?.id]);
+
+  const handleCloseOnboarding = () => {
+    localStorage.setItem('gd_onboarding_seen', 'true');
+    setShowOnboarding(false);
+  };
 
     const handleUserMigration = async (user: any) => {
       // Si el email coincide con el real del docente registrado, actualizamos el UUID
@@ -478,29 +512,7 @@ async function loadAllStudents() {
   setAllStudents(data ?? []);
 }
 
-async function handleDeleteStudent(studentId: string) {
-  if (!session?.user?.id) {
-    showAuthError();
-    return;
-  }
-  const confirmDelete = confirm("¿Eliminar este estudiante?")
 
-  if (!confirmDelete) return
-
-  const { error } = await supabase
-    .from("students")
-    .delete()
-    .eq("id", studentId)
-
-  if (error) {
-    alert("No se pudo eliminar el estudiante")
-    return
-  }
-
-  if (selectedGroup) {
-    loadStudents(selectedGroup)
-  }
-}
 
 
 useEffect(() => {
@@ -1141,6 +1153,30 @@ async function handleImportPdf(file: File) {
   if(input) input.value = '';
 }
 
+async function handleDeleteStudent() {
+  if (!studentToDelete || !session?.user?.id) return;
+  
+  setIsDeletingStudent(true);
+  try {
+    const { error } = await supabase
+      .from("students")
+      .delete()
+      .eq("id", studentToDelete.id);
+
+    if (error) throw error;
+
+    showToast("Estudiante eliminado correctamente", "success", setToast);
+    setAllStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
+    setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
+    setStudentToDelete(null);
+  } catch (error: any) {
+    console.error("Error eliminando estudiante:", error);
+    showToast("Error al eliminar estudiante: " + error.message, "error", setToast);
+  } finally {
+    setIsDeletingStudent(false);
+  }
+}
+
 async function confirmPdfImport() {
   if (!session?.user?.id) {
     showAuthError();
@@ -1197,72 +1233,24 @@ async function handleImportStudents(file: File) {
     return;
   }
 
-  const data = await file.arrayBuffer();
-  const workbook = XLSX.read(data, { type: "array" });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-
-  const rawRows = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: "",
-    raw: false,
-  }) as any[][];
-
-  const headerRowIndex = rawRows.findIndex((row) => {
-    const normalizedRow = row.map((cell) =>
-      String(cell || "").trim().toLowerCase()
-    );
-
-        return (
-      normalizedRow.includes("cédula") &&
-      normalizedRow.includes("nombre") &&
-      normalizedRow.includes("primer apellido")
-    );
-  });
-
-  if (headerRowIndex === -1) {
-      showToast("No se encontraron los encabezados del archivo PIAD.", "error", setToast);
-    return;
-  }
-
-  const rows = XLSX.utils.sheet_to_json(sheet, {
-    range: headerRowIndex,
-    defval: "",
-    raw: false,
-  });
-
-  console.log("Archivo recibido:", file.name);
-  console.log("Fila encabezado detectada:", headerRowIndex + 1);
-  console.log("Filas importadas:", rows);
-
-  const importedStudents = (rows as any[])
-    .map((row) => ({
-      name: `${String(row["Nombre"] || "").trim()} ${String(
-        row["Primer apellido"] || ""
-      ).trim()} ${String(row["Segundo apellido"] || "").trim()}`.trim(),
-      cedula:
-        String(row["Cédula"] || "")
-          .replace(/\s/g, "")
-          .trim() || null,
-      gender: null,
-      mep_email: null,
-      parent1_phone: null,
-      parent1_email: null,
-      parent2_phone: null,
-      parent2_email: null,
-      group_id: selectedGroup,
-    }))
-    .filter((student) => student.name);
-
-  console.log("Estudiantes convertidos:", importedStudents);
-
-  if (importedStudents.length === 0) {
-      showToast("No se encontraron estudiantes válidos para importar.", "error", setToast);
+  let importedStudents;
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: "array" });
+    const students = parseStudentsFromExcel(workbook);
+    
+    importedStudents = (students as ImportedStudent[]).map(s => ({
+      ...s,
+      group_id: selectedGroup
+    }));
+  } catch (error: any) {
+    console.error("Error parseando Excel:", error);
+    showToast(error.message || "No se pudieron identificar las columnas requeridas del Excel.", "error", setToast);
     return;
   }
 
   const cedulasImportadas = importedStudents
-    .map((student) => student.cedula)
+    .map((student: any) => student.cedula)
     .filter(Boolean);
 
   const { data: existingStudents, error: existingError } = await supabase
@@ -1281,7 +1269,7 @@ async function handleImportStudents(file: File) {
     (existingStudents || []).map((student) => student.cedula)
   );
 
-  const studentsToInsert = importedStudents.filter((student) => {
+  const studentsToInsert = importedStudents.filter((student: any) => {
     if (!student.cedula) return true;
     return !existingCedulas.has(student.cedula);
   });
@@ -1295,7 +1283,7 @@ async function handleImportStudents(file: File) {
 
   const { data: insertedStudents, error } = await supabase
     .from("students")
-    .insert(studentsToInsert.map(s => ({ ...s, owner_id: session.user.id })))
+    .insert(studentsToInsert.map((s: any) => ({ ...s, owner_id: session.user.id })))
     .select();
 
   if (error) {
@@ -1533,13 +1521,31 @@ async function handleImportStudents(file: File) {
                 </div>
               </div>
 
-              <button 
-                className="logout-button" 
-                type="button"
-                onClick={() => supabase.auth.signOut()}
+              <div 
+                style={{ 
+                  marginTop: "auto", 
+                  padding: "24px 0 16px 0", 
+                  textAlign: "center",
+                  borderTop: "1px solid #f1f5f9",
+                  background: "linear-gradient(to bottom, #ffffff, #f8faff)"
+                }}
               >
-                Cerrar sesión
-              </button>
+                <div 
+                  style={{ 
+                    fontSize: "14px", 
+                    fontWeight: 900, 
+                    color: "#4f46e5", 
+                    textTransform: "uppercase", 
+                    letterSpacing: "0.2em",
+                    textShadow: "0 2px 4px rgba(79, 70, 229, 0.1)",
+                    opacity: 0.9,
+                    position: "relative",
+                    zIndex: 10
+                  }}
+                >
+                  MARKETING IA CR
+                </div>
+              </div>
             </> 
           )}
         </div>
@@ -2457,15 +2463,24 @@ async function handleImportStudents(file: File) {
                   <div style={{ fontWeight: 800, fontSize: "16px", color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.2px" }}>
                     {student.name}
                   </div>
-                  <button 
-                    title="Editar estudiante"
-                    onClick={() => startEditingStudent(student)}
-                    className="flex justify-center items-center w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-transparent shadow-sm hover:border-indigo-100 cursor-pointer"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-[15px] h-[15px]">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.89 1.12l-3.122.936.936-3.122a4.5 4.5 0 011.12-1.89l13.04-13.04z" />
-                    </svg>
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button 
+                      title="Editar estudiante"
+                      onClick={() => startEditingStudent(student)}
+                      className="flex justify-center items-center w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-transparent shadow-sm hover:border-indigo-100 cursor-pointer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-[15px] h-[15px]">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.89 1.12l-3.122.936.936-3.122a4.5 4.5 0 011.12-1.89l13.04-13.04z" />
+                      </svg>
+                    </button>
+                    <button 
+                      title="Eliminar estudiante"
+                      onClick={() => setStudentToDelete(student)}
+                      className="flex justify-center items-center w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors border border-transparent shadow-sm hover:border-red-100 cursor-pointer"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Soft Grid Data */}
@@ -2995,13 +3010,153 @@ async function handleImportStudents(file: File) {
           {toast.message}
         </div>
       )}
+      {showOnboarding && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.5)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '16px',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '480px',
+            background: '#ffffff',
+            borderRadius: '32px',
+            padding: '40px',
+            boxShadow: '0 25px 70px rgba(0,0,0,0.15)',
+            position: 'relative',
+            overflow: 'hidden',
+            animation: 'modalEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {/* Background Accent */}
+            <div style={{ position: 'absolute', top: 0, right: 0, width: '150px', height: '150px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', borderRadius: '0 0 0 100%', opacity: 0.5 }}></div>
+
+            <div style={{ position: 'relative' }}>
+              <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#0f172a', marginBottom: '12px', letterSpacing: '-0.02em' }}>
+                🚀 Bienvenido(a) a Gestión Docente
+              </h2>
+              <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '32px', fontWeight: 500, lineHeight: 1.5 }}>
+                Organiza tu trabajo en pocos pasos y deja tu espacio listo para empezar.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '40px' }}>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800 }}>1</div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>📝 Paso 1: Crear tu primer grupo</h4>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>Ve a la barra lateral <strong>Grupos</strong> y presiona el botón <strong>+</strong>.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800 }}>2</div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>👥 Paso 2: Agregar estudiantes</h4>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>Ingresa a <strong>Más &gt; Estudiantes</strong> para cargar tu lista de forma manual o masiva.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800 }}>3</div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>🗓️ Paso 3: Crear el horario</h4>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>Ingresa a <strong>Más &gt; Horarios</strong> y define los días, horas y materias.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800 }}>4</div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>⚙️ Paso 4: Configurar la evaluación</h4>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>Ingresa a <strong>Más &gt; Configuración</strong> para definir los porcentajes.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '24px' }}>
+                <p style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', marginBottom: '20px', fontWeight: 600 }}>
+                  Cuando completes estos pasos, tendrás tu grupo listo para trabajar.
+                </p>
+                <button 
+                  onClick={handleCloseOnboarding}
+                  style={{
+                    width: '100%',
+                    background: '#4f46e5',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '16px',
+                    borderRadius: '16px',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 20px rgba(79, 70, 229, 0.2)',
+                    transition: 'transform 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  Entendido, empezar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {studentToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal-card animate-in fade-in zoom-in duration-200" style={{ maxWidth: '400px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fef2f2', color: '#ef4444', display: 'grid', placeItems: 'center', marginBottom: '20px' }}>
+                <AlertTriangle size={28} />
+              </div>
+              <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', marginBottom: '10px' }}>¿Eliminar estudiante?</h3>
+              <p style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6, marginBottom: '24px' }}>
+                Estás a punto de eliminar permanentemente a <strong>{studentToDelete.name}</strong>. Esta acción no se puede deshacer.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+                <button 
+                  onClick={() => setStudentToDelete(null)}
+                  disabled={isDeletingStudent}
+                  style={{ flex: 1, padding: '12px', borderRadius: '14px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleDeleteStudent}
+                  disabled={isDeletingStudent}
+                  style={{ flex: 1, padding: '12px', borderRadius: '14px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalEntrance {
+          from { transform: scale(0.9) translateY(20px); opacity: 0; }
+          to { transform: scale(1) translateY(0); opacity: 1; }
+        }
       `}</style>
     </div>
   )
 }
+

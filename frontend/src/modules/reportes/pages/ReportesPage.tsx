@@ -102,38 +102,44 @@ export default function ReportesPage({
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
-      
-      // 1. Header
-      doc.setFontSize(22);
-      doc.setTextColor(79, 70, 229); // indigo-600
-      doc.text(appSettings.institutionName || "MI INSTITUCIÓN", 20, 25);
+      const margin = 20;
+
+      // 1. Header & Logo
+      let headerY = 25;
+      if (appSettings.logoUrl) {
+        try {
+          doc.addImage(appSettings.logoUrl, 'PNG', margin, 15, 25, 25);
+          headerY = 25;
+        } catch (e) { console.error("Logo error:", e); }
+      }
+
+      doc.setFontSize(20);
+      doc.setTextColor(30, 41, 59); // slate-800
+      doc.text(appSettings.institutionName || "GESTIÓN DOCENTE", appSettings.logoUrl ? 50 : margin, 25);
       
       doc.setFontSize(10);
       doc.setTextColor(100, 116, 139); // slate-500
-      doc.text(`Docente: ${appSettings.teacherName || "—"}`, 20, 32);
-      doc.text(`Fecha de generación: ${new Date().toLocaleDateString()}`, 20, 37);
+      doc.text(`DOCENTE: ${appSettings.teacherName || "—"}`, appSettings.logoUrl ? 50 : margin, 32);
+      doc.text(`FECHA GENERACIÓN: ${new Date().toLocaleDateString()}`, appSettings.logoUrl ? 50 : margin, 37);
+      doc.text(`PERÍODO: ${academicPeriod === 'semester1' ? 'I Semestre' : academicPeriod === 'semester2' ? 'II Semestre' : 'Anual'}`, appSettings.logoUrl ? 50 : margin, 42);
 
       const reportTitle = reportType === "grupal" 
-        ? `REPORTE GRUPAL - ${currentGroupName}`
-        : `REPORTE INDIVIDUAL - ${allStudents.find(s => s.id === Number(selectedStudent))?.name || "Estudiante"}`;
+        ? `REPORTE ACADÉMICO GRUPAL - ${currentGroupName}`
+        : `REPORTE ACADÉMICO INDIVIDUAL - ${allStudents.find(s => s.id === Number(selectedStudent))?.name || "Estudiante"}`;
       
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42); // slate-900
-      doc.text(reportTitle.toUpperCase(), pageWidth / 2, 55, { align: "center" });
+      doc.text(reportTitle.toUpperCase(), pageWidth / 2, 60, { align: "center" });
 
-      let currentY = 65;
+      let currentY = 70;
+      const studentIds = reportType === "individual" ? [Number(selectedStudent)] : filteredStudents.map(s => s.id);
 
-      // 2. Fetch and Render Sections
-      const studentIds = reportType === "individual" 
-        ? [Number(selectedStudent)]
-        : filteredStudents.map(s => s.id);
-
-      // ASISTENCIA
+      // --- ASISTENCIA ---
       if (sections.asistencia) {
         doc.setFontSize(12);
         doc.setTextColor(79, 70, 229);
-        doc.text("RESUMEN DE ASISTENCIA", 20, currentY);
-        currentY += 7;
+        doc.text("RESUMEN DE ASISTENCIA", margin, currentY);
+        currentY += 6;
 
         const { data: attendance } = await supabase
           .from("attendance_lessons")
@@ -142,42 +148,157 @@ export default function ReportesPage({
           .gte("attendance_date", fromDate)
           .lte("attendance_date", toDate);
 
-        const attendanceMap: Record<number, { present: number, total: number }> = {};
-        studentIds.forEach(id => attendanceMap[id] = { present: 0, total: 0 });
-        
-        attendance?.forEach(a => {
-          if (attendanceMap[a.student_id]) {
-            attendanceMap[a.student_id].total++;
-            if (a.status === "Presente") attendanceMap[a.student_id].present++;
-          }
-        });
+        if (!attendance || attendance.length === 0) {
+          doc.setFontSize(10);
+          doc.setTextColor(148, 163, 184);
+          doc.text("Sin datos de asistencia registrados en este rango.", margin, currentY + 5);
+          currentY += 15;
+        } else {
+          const attendanceMap: Record<number, { present: number, late: number, total: number }> = {};
+          studentIds.forEach(id => attendanceMap[id] = { present: 0, late: 0, total: 0 });
+          
+          attendance.forEach(a => {
+            if (attendanceMap[a.student_id]) {
+              attendanceMap[a.student_id].total++;
+              const st = (a.status || "").toLowerCase();
+              if (st === "presente" || st === "p") attendanceMap[a.student_id].present++;
+              else if (st === "tardía" || st === "t") attendanceMap[a.student_id].late++;
+            }
+          });
 
-        const attendanceRows = studentIds.map(id => {
-          const s = allStudents.find(st => st.id === id);
-          const stats = attendanceMap[id];
-          const pct = stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : "0";
-          return [s?.name || id, `${stats.present}/${stats.total}`, `${pct}%`];
-        });
+          const attendanceRows = studentIds.map(id => {
+            const s = allStudents.find(st => st.id === id);
+            const stats = attendanceMap[id];
+            const presenceVal = stats.present + (stats.late * 0.5);
+            const pct = stats.total > 0 ? ((presenceVal / stats.total) * 100).toFixed(1) : "0";
+            return [s?.name || "—", stats.present, stats.late, stats.total, `${pct}%`];
+          });
 
-        autoTable(doc, {
-          startY: currentY,
-          head: [["Estudiante", "Presencias", "Porcentaje"]],
-          body: attendanceRows,
-          theme: "striped",
-          headStyles: { fillColor: [79, 70, 229] },
-          margin: { left: 20, right: 20 }
-        });
-        currentY = (doc as any).lastAutoTable.finalY + 15;
+          autoTable(doc, {
+            startY: currentY,
+            head: [["Estudiante", "Presente", "Tardía", "Total Lecc.", "% Asistencia"]],
+            body: attendanceRows,
+            theme: "striped",
+            headStyles: { fillColor: [79, 70, 229], fontSize: 9 },
+            styles: { fontSize: 8 },
+            margin: { left: margin, right: margin }
+          });
+          currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
       }
 
-      // ANECDOTARIO
-      if (sections.anecdotario) {
-        if (currentY > 230) { doc.addPage(); currentY = 25; }
-        
+      // --- COTIDIANO (Summary) ---
+      if (sections.cotidiano) {
+        if (currentY > 240) { doc.addPage(); currentY = 25; }
         doc.setFontSize(12);
-        doc.setTextColor(234, 88, 12); // orange-600
-        doc.text("REGISTROS ANECDÓTICOS", 20, currentY);
-        currentY += 7;
+        doc.setTextColor(37, 99, 235); // blue-600
+        doc.text("TRABAJO COTIDIANO", margin, currentY);
+        currentY += 6;
+
+        const { data: cwData } = await supabase
+          .from("daily_work_scores")
+          .select("*")
+          .in("student_id", studentIds)
+          .eq("period", academicPeriod === 'annual' ? 'semester1' : academicPeriod);
+
+        if (!cwData || cwData.length === 0) {
+          doc.setFontSize(10);
+          doc.setTextColor(148, 163, 184);
+          doc.text("Sin datos de trabajo cotidiano registrados.", margin, currentY + 5);
+          currentY += 15;
+        } else {
+          const cwMap: Record<number, { score: number, total: number }> = {};
+          studentIds.forEach(id => cwMap[id] = { score: 0, total: 0 });
+          cwData.forEach(d => {
+            if (cwMap[d.student_id]) {
+              cwMap[d.student_id].score += d.score || 0;
+              cwMap[d.student_id].total += d.total_points || 0;
+            }
+          });
+
+          const cwRows = studentIds.map(id => {
+            const s = allStudents.find(st => st.id === id);
+            const stats = cwMap[id];
+            const pct = stats.total > 0 ? ((stats.score / stats.total) * 100).toFixed(1) : "0";
+            return [s?.name || "—", `${stats.score} / ${stats.total}`, `${pct}%`];
+          });
+
+          autoTable(doc, {
+            startY: currentY,
+            head: [["Estudiante", "Puntos Obtenidos", "Porcentaje"]],
+            body: cwRows,
+            theme: "striped",
+            headStyles: { fillColor: [37, 99, 235], fontSize: 9 },
+            styles: { fontSize: 8 },
+            margin: { left: margin, right: margin }
+          });
+          currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
+      }
+
+      // --- CALIF. (NOTAS) ---
+      if (sections.notas) {
+        if (currentY > 240) { doc.addPage(); currentY = 25; }
+        doc.setFontSize(12);
+        doc.setTextColor(5, 150, 105); // emerald-600
+        doc.text("CUADRO DE CALIFICACIONES", margin, currentY);
+        currentY += 6;
+
+        const activeRubrics = evaluationRubrics.filter(r => r.name && r.name.trim() !== "");
+        const { data: gradesData } = await supabase
+          .from("grades")
+          .select("*")
+          .in("student_id", studentIds)
+          .eq("group_id", selectedGroup)
+          .eq("period", academicPeriod === 'annual' ? 'semester1' : academicPeriod);
+
+        if (!gradesData || gradesData.length === 0) {
+          doc.setFontSize(10);
+          doc.setTextColor(148, 163, 184);
+          doc.text("No se han registrado calificaciones para este período.", margin, currentY + 5);
+          currentY += 15;
+        } else {
+          const gradesMap: Record<number, Record<string, number>> = {};
+          gradesData.forEach(row => {
+            if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
+            gradesMap[row.student_id][row.rubric_id] = row.score;
+          });
+
+          const rubricHeaders = activeRubrics.map(r => `${r.name}\n(${r.percentage}%)`);
+          const tableHeaders = ["Estudiante", ...rubricHeaders, "Promedio"];
+
+          const gradesRows = studentIds.map(id => {
+            const s = allStudents.find(st => st.id === id);
+            const studentScores = gradesMap[id] || {};
+            let totalFinal = 0;
+            const rubricScores = activeRubrics.map(r => {
+              const score = studentScores[r.id] ?? 0;
+              totalFinal += (score * r.percentage) / 100;
+              return score > 0 ? score.toString() : "0";
+            });
+            return [s?.name || "—", ...rubricScores, totalFinal.toFixed(1)];
+          });
+
+          autoTable(doc, {
+            startY: currentY,
+            head: [tableHeaders],
+            body: gradesRows,
+            theme: "grid",
+            headStyles: { fillColor: [5, 150, 105], fontSize: 8 },
+            styles: { fontSize: 7, cellPadding: 2 },
+            margin: { left: margin, right: margin }
+          });
+          currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
+      }
+
+      // --- ANECDOTARIO ---
+      if (sections.anecdotario) {
+        if (currentY > 240) { doc.addPage(); currentY = 25; }
+        doc.setFontSize(12);
+        doc.setTextColor(217, 119, 6); // amber-600
+        doc.text("REGISTROS ANECDÓTICOS", margin, currentY);
+        currentY += 6;
 
         const { data: records } = await supabase
           .from("anecdotal_records")
@@ -187,88 +308,34 @@ export default function ReportesPage({
           .lte("date", toDate)
           .order("date", { ascending: false });
 
-        const recordRows = (records || []).map(r => {
-          const s = allStudents.find(st => st.id === r.student_id);
-          return [
-            new Date(r.date).toLocaleDateString(),
-            reportType === "grupal" ? (s?.name || "—") : r.type,
+        if (!records || records.length === 0) {
+          doc.setFontSize(10);
+          doc.setTextColor(148, 163, 184);
+          doc.text("Sin incidentes o registros en este rango.", margin, currentY + 5);
+        } else {
+          const recordRows = records.map(r => [
+            new Date(r.date + 'T12:00:00').toLocaleDateString(),
+            reportType === "grupal" ? (allStudents.find(st => st.id === r.student_id)?.name || "—") : r.type,
             r.type,
             r.description
-          ];
-        });
+          ]);
 
-        autoTable(doc, {
-          startY: currentY,
-          head: [["Fecha", reportType === "grupal" ? "Estudiante" : "Tipo", "Categoría", "Descripción"]],
-          body: recordRows,
-          theme: "grid",
-          headStyles: { fillColor: [234, 88, 12] },
-          margin: { left: 20, right: 20 },
-          styles: { fontSize: 9 }
-        });
-        currentY = (doc as any).lastAutoTable.finalY + 15;
-      }
-
-      // NOTAS (Real Data with Breakdown)
-      if (sections.notas) {
-        if (currentY > 230) { doc.addPage(); currentY = 25; }
-        doc.setFontSize(12);
-        doc.setTextColor(5, 150, 105); // emerald-600
-        doc.text("CALIFICACIONES", 20, currentY);
-        currentY += 7;
-
-        const activeRubrics = evaluationRubrics.filter(r => r.name && r.name.trim() !== "");
-        const periodToLoad = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
-        
-        // Fetch grades for the period
-        const { data: gradesData } = await supabase
-          .from("grades")
-          .select("*")
-          .in("student_id", studentIds)
-          .eq("period", periodToLoad);
-
-        // Map grades: { [studentId]: { [rubricId]: score } }
-        const gradesMap: Record<number, Record<string, number>> = {};
-        (gradesData || []).forEach(row => {
-          if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
-          gradesMap[row.student_id][row.rubric_id] = row.score;
-        });
-
-        // Prepare Headers: [Estudiante, Rubro1, Rubro2..., Nota Final]
-        const rubricHeaders = activeRubrics.map(r => `${r.name}\n(${r.percentage}%)`);
-        const tableHeaders = ["Estudiante", ...rubricHeaders, "Nota Final"];
-
-        // Prepare Body
-        const gradesRows = studentIds.map(id => {
-          const s = allStudents.find(st => st.id === id);
-          const studentScores = gradesMap[id] || {};
-          
-          let totalFinal = 0;
-          const rubricScores = activeRubrics.map(r => {
-            const score = studentScores[r.id] ?? 0;
-            totalFinal += (score * r.percentage) / 100;
-            return score > 0 ? score.toString() : "0";
+          autoTable(doc, {
+            startY: currentY,
+            head: [["Fecha", reportType === "grupal" ? "Estudiante" : "Tipo", "Categoría", "Descripción"]],
+            body: recordRows,
+            theme: "grid",
+            headStyles: { fillColor: [217, 119, 6], fontSize: 9 },
+            styles: { fontSize: 8 },
+            margin: { left: margin, right: margin }
           });
-
-          return [s?.name || id, ...rubricScores, totalFinal.toFixed(1)];
-        });
-        
-        autoTable(doc, {
-          startY: currentY,
-          head: [tableHeaders],
-          body: gradesRows,
-          theme: "striped",
-          headStyles: { fillColor: [5, 150, 105] },
-          margin: { left: 20, right: 20 },
-          styles: { fontSize: 8, cellPadding: 2 }
-        });
-        currentY = (doc as any).lastAutoTable.finalY + 15;
+        }
       }
 
       doc.save(`Reporte_${currentGroupName}_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (error) {
-      console.error("PDF Error:", error);
-      alert("Error al generar el PDF. Revisa la consola.");
+      console.error("PDF Final Error:", error);
+      alert("Error crítico al generar reporte. Revisa la consola.");
     } finally {
       setLoading(false);
     }
