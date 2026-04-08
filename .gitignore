@@ -1,0 +1,6 @@
+node_modules/
+.env
+dist/
+.DS_Store
+tsc_errors.txt
+tsc_clean.txt
