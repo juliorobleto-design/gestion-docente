@@ -11,6 +11,8 @@ import CotidianoPage from "./modules/cotidiano/pages/CotidianoPage";
 import NotasPage from "./modules/notas/pages/NotasPage";
 import AnecdoticoPage from "./modules/anecdotico/pages/AnecdoticoPage";
 import ReportesPage from "./modules/reportes/pages/ReportesPage";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
 
@@ -119,6 +121,7 @@ export default function App() {
     const [isGuiaConfigOpen, setIsGuiaConfigOpen] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState<any | null>(null);
     const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+    const [scheduleConflict, setScheduleConflict] = useState<{ groupName: string, day: string, startTime: string, endTime: string } | null>(null);
 
     const BLOCKED_DOMAINS = ["mep.go.cr", "go.cr"];
 
@@ -243,13 +246,15 @@ export default function App() {
       {
     id: number
     groupId: number
+    groupName?: string
     day: string
     startTime: string
     endTime: string
     subject: string
     lessons: number
   }[]
->([])
+>([]);
+const [showSchedulePreview, setShowSchedulePreview] = useState(false);
   const [schedules, setSchedules] = useState<any[]>([])
   const [newScheduleGroup, setNewScheduleGroup] = useState<number | "">("")
   const [scheduleDay, setScheduleDay] = useState("")
@@ -615,6 +620,58 @@ console.log("SCHEDULES RAW:", data)
   updateTodaySchedule(mappedSchedules)
 }
 
+function generateSchedulePDF() {
+  const doc = new jsPDF('l', 'mm', 'a4');
+  
+  // Header
+  doc.setFontSize(22);
+  doc.setTextColor(79, 70, 229);
+  doc.text("HORARIO SEMANAL - GESTIÓN DOCENTE", 14, 22);
+  
+  doc.setFontSize(12);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Docente: ${appSettings.teacherName || 'Nombre no asignado'}`, 14, 30);
+  doc.text(`Institución: ${appSettings.institutionName || 'Mi Institución'}`, 14, 36);
+
+  const tableData = dayOrder.map(day => {
+    const dayItems = scheduleItems
+      .filter(item => item.day === day)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    
+    if (dayItems.length === 0) return [day, "Sin lecciones"];
+    
+    const scheduleStr = dayItems.map(item => 
+      `${item.startTime}-${item.endTime}: ${item.groupName} (${item.subject})`
+    ).join("\n\n");
+    
+    return [day, scheduleStr];
+  });
+
+  autoTable(doc, {
+    startY: 45,
+    head: [['Día', 'Horario Detallado']],
+    body: tableData,
+    headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 12, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 10, cellPadding: 8, valign: 'middle' },
+    columnStyles: {
+      0: { cellWidth: 40, fontStyle: 'bold' },
+      1: { cellWidth: 200 }
+    },
+    theme: 'striped',
+  });
+
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text(`BY MARKETING IA CR - ${new Date().toLocaleDateString()}`, 14, doc.internal.pageSize.height - 10);
+  }
+
+  doc.save(`horario_${new Date().getTime()}.pdf`);
+  setShowSchedulePreview(false);
+}
+
 
   /* System Clock Disabled */
 
@@ -894,7 +951,7 @@ async function saveGroupGuiaInfo() {
     return;
   }
 
-  showToast("Información del guía actualizada", "success", setToast);
+  handleShowToast({ message: "Información del guía actualizada", type: "success" });
   await loadGroups();
 }
   
@@ -953,13 +1010,18 @@ if (newStart >= newEnd) {
   return
 }
 
-const hasOverlap = scheduleItems.some((item) => {
+const overlappingItem = scheduleItems.find((item) => {
   if (item.day !== scheduleDay) return false
   return newStart < item.endTime && newEnd > item.startTime
 })
 
-if (hasOverlap) {
-  alert("Ya tienes otro grupo asignado en ese mismo día y horario")
+if (overlappingItem) {
+  setScheduleConflict({
+    groupName: overlappingItem.groupName || "Otro grupo",
+    day: scheduleDay,
+    startTime: overlappingItem.startTime,
+    endTime: overlappingItem.endTime
+  });
   return
 }
 
@@ -1261,7 +1323,7 @@ async function handleImportStudents(file: File) {
 
   if (existingError) {
     console.error("Error verificando duplicados:", existingError);
-      showToast("Error verificando duplicados: " + existingError.message, "error", setToast);
+    handleShowToast({ message: "Error verificando duplicados: " + existingError.message, type: "error" });
     return;
   }
 
@@ -1275,7 +1337,7 @@ async function handleImportStudents(file: File) {
   });
 
   if (studentsToInsert.length === 0) {
-      showToast("Todos los estudiantes del archivo ya existen en este grupo.", "success", setToast);
+    handleShowToast({ message: "Todos los estudiantes del archivo ya existen en este grupo.", type: "success" });
     return;
   }
 
@@ -1297,9 +1359,9 @@ async function handleImportStudents(file: File) {
     setStudents((prev) => [...prev, ...insertedStudents]);
 
     if (skippedCount > 0) {
-      showToast(`${insertedStudents.length} estudiantes importados correctamente. ${skippedCount} repetidos fueron omitidos.`, "success", setToast);
+      handleShowToast({ message: `${insertedStudents.length} estudiantes importados correctamente. ${skippedCount} repetidos fueron omitidos.`, type: "success" });
     } else {
-      showToast(`${insertedStudents.length} estudiantes importados correctamente.`, "success", setToast);
+      handleShowToast({ message: `${insertedStudents.length} estudiantes importados correctamente.`, type: "success" });
     }
   }
 }
@@ -2071,6 +2133,44 @@ async function handleImportStudents(file: File) {
   </div>
   
 )}
+        </div>
+      </div>
+
+      <div className="module-card" style={{ marginTop: "24px" }}>
+        <div className="module-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{ background: "#f5f3ff", color: "#4f46e5", padding: "10px", borderRadius: "14px" }}>
+              <Clock size={24} />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 900, color: "#0f172a" }}>Horario de la Semana</h2>
+              <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>VISTA GENERAL DE LECCIONES</p>
+            </div>
+          </div>
+          <button onClick={() => setShowSchedulePreview(true)} className="secondary-button" style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f5f3ff", color: "#4f46e5", border: "1px solid #c7d2fe", padding: "10px 18px", borderRadius: "14px", fontWeight: 700 }}>
+            <ScrollText size={16} /> Vista Previa PDF
+          </button>
+        </div>
+        <div style={{ padding: "24px", overflowX: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", minWidth: "900px" }}>
+            {dayOrder.map(day => {
+              const items = scheduleItems.filter(s => s.day === day).sort((a,b) => a.startTime.localeCompare(b.startTime));
+              return (
+                <div key={day} style={{ background: "#f8fafc", borderRadius: "24px", padding: "16px", border: "1px solid #e2e8f0", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)" }}>
+                  <h3 style={{ fontSize: "13px", fontWeight: 900, color: "#4f46e5", textTransform: "uppercase", textAlign: "center", marginBottom: "16px", letterSpacing: "0.05em", background: "#fff", padding: "6px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>{day}</h3>
+                  <div style={{ display: "grid", gap: "10px" }}>
+                    {items.length > 0 ? items.map(item => (
+                      <div key={item.id} style={{ background: "#fff", padding: "10px", borderRadius: "14px", border: "1px solid #f1f5f9", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)", transition: "transform 0.2s" }} className="hover:animate-in hover:fade-in hover:scale-[1.02]">
+                        <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", display: "flex", alignItems: "center", gap: "4px" }}><Clock size={10} /> {item.startTime} - {item.endTime}</div>
+                        <div style={{ fontSize: "13px", fontWeight: 900, color: "#1e293b", margin: "4px 0" }}>{item.groupName}</div>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#6366f1", opacity: 0.8 }}>{item.subject}</div>
+                      </div>
+                    )) : <div style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", fontStyle: "italic", padding: "24px 0", background: "rgba(255,255,255,0.5)", borderRadius: "14px" }}>Sin lecciones</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -3135,6 +3235,69 @@ async function handleImportStudents(file: File) {
                 >
                   {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                   Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scheduleConflict && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal-card animate-in fade-in zoom-in duration-200" style={{ maxWidth: '450px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: '#fff7ed', color: '#f97316', display: 'grid', placeItems: 'center', marginBottom: '24px', boxShadow: '0 8px 16px rgba(249, 115, 22, 0.1)' }}>
+                <AlertTriangle size={32} />
+              </div>
+              <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#1e293b', marginBottom: '12px' }}>¡Conflicto de Horario!</h3>
+              <div style={{ padding: '20px', background: '#f8fafc', borderRadius: '20px', width: '100%', marginBottom: '24px', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontSize: '15px', color: '#475569', margin: 0, fontWeight: 500 }}>
+                  El grupo <strong style={{ color: '#0f172a' }}>{scheduleConflict.groupName}</strong> ya tiene asignado este espacio el día <strong style={{ color: '#0f172a' }}>{scheduleConflict.day}</strong> de <strong style={{ color: '#0f172a' }}>{scheduleConflict.startTime} a {scheduleConflict.endTime}</strong>.
+                </p>
+              </div>
+              <button 
+                onClick={() => setScheduleConflict(null)}
+                className="primary-button"
+                style={{ width: '100%', background: '#f97316', padding: '14px', borderRadius: '16px' }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSchedulePreview && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal-card animate-in fade-in zoom-in duration-200" style={{ maxWidth: '600px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a' }}>Vista Previa del PDF</h3>
+                <button onClick={() => setShowSchedulePreview(false)} style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+              </div>
+              
+              <div style={{ background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '24px', padding: '32px', marginBottom: '32px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <Clock size={40} style={{ color: '#4f46e5', marginBottom: '16px' }} />
+                  <h4 style={{ fontSize: '18px', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>Generando Horario Profesional</h4>
+                  <p style={{ fontSize: '14px', color: '#64748b', fontWeight: 500 }}>El archivo incluirá todos tus grupos ordenados por día, con el formato oficial seleccionado.</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={() => setShowSchedulePreview(false)}
+                  className="secondary-button"
+                  style={{ flex: 1, padding: '14px' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={generateSchedulePDF}
+                  className="primary-button"
+                  style={{ flex: 1, padding: '14px' }}
+                >
+                  Descargar Ahora
                 </button>
               </div>
             </div>
