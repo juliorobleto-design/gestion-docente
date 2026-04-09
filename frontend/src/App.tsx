@@ -1790,12 +1790,12 @@ async function handleImportStudents(file: File) {
       Cerrar sesión
     </button>
 
-  </div>
-)}
-
-</div>
- 
-  </div>
+    </div>
+  )}
+</div> 
+    </div> 
+  </header> 
+</div> 
 
   {/* Selector de Periodo Académico (Opción B) */}
   <div style={{ padding: "8px 32px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "24px" }}>
@@ -1842,523 +1842,192 @@ async function handleImportStudents(file: File) {
   </div>
 
     {activeSection === "schedule" && (
-  <section
-    className="content-wrap"
-    style={{ position: "relative", zIndex: 1 }}
-  >
-    
-    <div style={{ display: "grid", gridTemplateColumns: "1.7fr 0.9fr", gap: "24px", alignItems: "start" }}>
-      <div className="module-card">
-        <div
-          className="module-header"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto 1fr",
-            alignItems: "center",
-            padding: "16px 24px",
-            borderBottom: "1px solid #e2e8f0",
-          }}
-        >
-          <div style={{ textAlign: "left" }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: "#0f172a" }}>Horario</h2>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: "#64748b", margin: 0 }}>
-              Horario de clases - {scheduleGroupName}
-            </p>
-          </div>
-          <div />
-        </div>
-          <div
-  style={{
-    display: "flex",
-    gap: "12px",
-    flexWrap: "wrap",
-    marginTop: "12px",
-    marginBottom: "20px",
-  }}
->
-  <div
-    style={{
-      padding: "12px 16px",
-      borderRadius: "14px",
-      background: "#eef2ff",
-      border: "1px solid #c7d2fe",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      minWidth: "140px"
-    }}
-  >
-    <div style={{ fontSize: "11px", fontWeight: 800, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-      Lecciones del día
-    </div>
-    <div style={{ fontSize: "20px", fontWeight: 800, color: "#1e1b4b" }}>
-      {totalLessonsGroup}
-    </div>
-  </div>
-<div
-  style={{
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap",
-    marginBottom: "20px",
-  }}
->
-   {totalLessonsByDay.map(({ day, total }) => (
-    <div
-      key={day}
-      style={{
-        padding: "10px 14px",
-        borderRadius: "14px",
-        background: "#f8fafc",
-        border: "1px solid #e2e8f0",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        minWidth: "80px"
-      }}
-    >
-      <div style={{ fontSize: "10px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", marginBottom: "4px" }}>
-        {day}
-      </div>
-      <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>
-        {total}
-      </div>
-    </div>
-  ))}
-</div>
-  <div
-    style={{
-      padding: "12px 16px",
-      borderRadius: "14px",
-      background: "#ecfeff",
-      border: "1px solid #bae6fd",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      minWidth: "140px"
-    }}
-  >
-    <div style={{ fontSize: "11px", fontWeight: 800, color: "#0891b2", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-      Total Lecciones
-    </div>
-    <div style={{ fontSize: "20px", fontWeight: 800, color: "#083344" }}>
-      {totalLessonsTeacher}
-    </div>
-  </div>
-</div>
+      <section className="content-wrap" style={{ position: "relative", zIndex: 1 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: "24px", alignItems: "start" }}>
+          <div className="module-card" style={{ position: "sticky", top: "24px" }}>
+            <div style={{ padding: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+                <div style={{ background: "#eff6ff", color: "#3b82f6", padding: "10px", borderRadius: "14px" }}>
+                  <CalendarCheck size={24} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>Agregar Horario</h2>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#64748b", fontWeight: 600, textTransform: "uppercase" }}>Asignación de lecciones</p>
+                </div>
+              </div>
+              
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>GRUPO</label>
+                  <select
+                    value={newScheduleGroup}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setNewScheduleGroup(value === "" ? "" : Number(value))
+                    }}
+                    style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", background: "#fff", fontWeight: 500 }}
+                  >
+                    <option value="">Selecciona un grupo</option>
+                    {orderedGroups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>DÍA</label>
+                  <select 
+                    value={scheduleDay} 
+                    onChange={(e) => setScheduleDay(e.target.value)} 
+                    style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", background: "#fff", fontWeight: 500 }}
+                  >
+                    <option value="">Selecciona un día</option>
+                    {dayOrder.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
 
-
-        <div style={{ padding: "20px" }}>
-          {newScheduleGroup === "" ? (
-             <p>Selecciona un grupo para ver su horario.</p>
-) : selectedScheduleItems.length === 0 ? (
-  <p>Este grupo aún no tiene horarios agregados.</p>
-) : (
-  <div style={{ overflowX: "auto" }}>
-    <table
-  style={{
-    width: "100%",
-    borderCollapse: "collapse",
-    background: "#fff",
-    borderRadius: "14px",
-    overflow: "hidden",
-    tableLayout: "fixed",
-  }}
->
-  <thead>
-    <tr>
-      <th
-        style={{
-          padding: "12px",
-          borderBottom: "1px solid #e5e7eb",
-          fontSize: "14px",
-          textAlign: "left",
-          width: "18%",
-        }}
-      >
-        Día
-      </th>
-
-      <th
-        style={{
-          padding: "12px",
-          borderBottom: "1px solid #e5e7eb",
-          fontSize: "14px",
-          textAlign: "left",
-          width: "28%",
-        }}
-      >
-        Hora
-      </th>
-
-      <th
-        style={{
-          padding: "12px",
-          borderBottom: "1px solid #e5e7eb",
-          fontSize: "14px",
-          textAlign: "left",
-          width: "28%",
-        }}
-      >
-        Materia
-      </th>
-
-      <th
-        style={{
-          padding: "12px",
-          borderBottom: "1px solid #e5e7eb",
-          fontSize: "14px",
-          textAlign: "center",
-          width: "10%",
-        }}
-      >
-        Lecciones
-      </th>
-
-      <th
-        style={{
-          padding: "12px",
-          borderBottom: "1px solid #e5e7eb",
-          fontSize: "14px",
-          textAlign: "center",
-          width: "16%",
-        }}
-      >
-        Acciones
-      </th>
-    </tr>
-  </thead>
-
-  <tbody>
-    {selectedScheduleItems.map((item) => (
-      <tr key={item.id}>
-        <td
-          style={{
-            padding: "12px",
-            borderBottom: "1px solid #f1f5f9",
-            fontSize: "14px",
-          }}
-        >
-          {item.day}
-        </td>
-
-        <td
-          style={{
-            padding: "12px",
-            borderBottom: "1px solid #f1f5f9",
-            fontSize: "14px",
-          }}
-        >
-          {item.startTime} - {item.endTime}
-        </td>
-
-        <td
-          style={{
-            padding: "12px",
-            borderBottom: "1px solid #f1f5f9",
-            fontSize: "14px",
-            fontWeight: 600,
-          }}
-        >
-          {item.subject}
-        </td>
-
-        <td
-          style={{
-            padding: "12px",
-            borderBottom: "1px solid #f1f5f9",
-            fontSize: "14px",
-            fontWeight: 600,
-            textAlign: "center",
-          }}
-        >
-          {item.lessons}
-        </td>
-        <td
-          style={{
-            padding: "12px",
-            borderBottom: "1px solid #f1f5f9",
-            textAlign: "center"
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              onClick={() => handleEditSchedule(item)}
-              style={{
-                height: "34px",
-                padding: "0 12px",
-                borderRadius: "10px",
-                border: "1px solid #bfdbfe",
-                background: "#eff6ff",
-                color: "#1d4ed8",
-                fontSize: "12px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Editar
-            </button>
-
-            <button
-              onClick={() => handleDeleteSchedule(item.id)}
-              style={{
-                height: "34px",
-                padding: "0 12px",
-                borderRadius: "10px",
-                border: "1px solid #fecaca",
-                background: "#fff1f2",
-                color: "#b91c1c",
-                fontSize: "12px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Eliminar
-            </button>
-          </div>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</table>
-  </div>
-  
-)}
-        </div>
-      </div>
-
-      <div className="module-card" style={{ marginTop: "24px" }}>
-        <div className="module-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ background: "#f5f3ff", color: "#4f46e5", padding: "10px", borderRadius: "14px" }}>
-              <Clock size={24} />
-            </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 900, color: "#0f172a" }}>Horario de la Semana</h2>
-              <p style={{ margin: 0, fontSize: "12px", color: "#64748b", fontWeight: 600 }}>VISTA GENERAL DE LECCIONES</p>
-            </div>
-          </div>
-          <button onClick={() => setShowSchedulePreview(true)} className="secondary-button" style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f5f3ff", color: "#4f46e5", border: "1px solid #c7d2fe", padding: "10px 18px", borderRadius: "14px", fontWeight: 700 }}>
-            <ScrollText size={16} /> Vista Previa PDF
-          </button>
-        </div>
-        <div style={{ padding: "24px", overflowX: "auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", minWidth: "900px" }}>
-            {dayOrder.map(day => {
-              const items = scheduleItems.filter(s => s.day === day).sort((a,b) => a.startTime.localeCompare(b.startTime));
-              return (
-                <div key={day} style={{ background: "#f8fafc", borderRadius: "24px", padding: "16px", border: "1px solid #e2e8f0", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.02)" }}>
-                  <h3 style={{ fontSize: "13px", fontWeight: 900, color: "#4f46e5", textTransform: "uppercase", textAlign: "center", marginBottom: "16px", letterSpacing: "0.05em", background: "#fff", padding: "6px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>{day}</h3>
-                  <div style={{ display: "grid", gap: "10px" }}>
-                    {items.length > 0 ? items.map(item => (
-                      <div key={item.id} style={{ background: "#fff", padding: "10px", borderRadius: "14px", border: "1px solid #f1f5f9", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)", transition: "transform 0.2s" }} className="hover:animate-in hover:fade-in hover:scale-[1.02]">
-                        <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", display: "flex", alignItems: "center", gap: "4px" }}><Clock size={10} /> {item.startTime} - {item.endTime}</div>
-                        <div style={{ fontSize: "13px", fontWeight: 900, color: "#1e293b", margin: "4px 0" }}>{item.groupName}</div>
-                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#6366f1", opacity: 0.8 }}>{item.subject}</div>
-                      </div>
-                    )) : <div style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", fontStyle: "italic", padding: "24px 0", background: "rgba(255,255,255,0.5)", borderRadius: "14px" }}>Sin lecciones</div>}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>INICIO</label>
+                    <input type="text" placeholder="07:00" value={scheduleStartTime} onChange={(e) => setScheduleStartTime(formatTime(e.target.value))} style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", fontWeight: 500 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>FIN</label>
+                    <input type="text" placeholder="07:40" value={scheduleEndTime} onChange={(e) => setScheduleEndTime(formatTime(e.target.value))} style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", fontWeight: 500 }} />
                   </div>
                 </div>
-              );
-            })}
+
+                <div>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>MATERIA</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej. Informática" 
+                    value={scheduleSubject} 
+                    onChange={(e) => setScheduleSubject(e.target.value)} 
+                    list="subject-suggestions-repaired-v3" 
+                    style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", fontWeight: 500 }} 
+                  />
+                  <datalist id="subject-suggestions-repaired-v3">
+                    {subjectSuggestions.map((s) => <option key={s} value={s} />)}
+                  </datalist>
+                </div>
+
+                <button
+                  onClick={handleAddSchedule}
+                  className="primary-button"
+                  style={{ width: "100%", height: "54px", borderRadius: "16px", marginTop: "10px", fontSize: "16px", fontWeight: 800, boxShadow: "0 10px 15px -3px rgba(37, 99, 235, 0.2)" }}
+                >
+                  {editingScheduleId !== null ? "Guardar Cambios" : "Agregar Horario"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+
+          {/* COLUMNA DERECHA: RESULTADOS */}
+          <div style={{ display: "grid", gap: "24px" }}>
+
+
+            {/* TABLA HORARIO CLASES GRUPO */}
+            <div className="module-card">
+              <div className="module-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{ background: "#f5f3ff", color: "#4f46e5", padding: "10px", borderRadius: "14px" }}>
+                    <Clock size={24} />
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 900, color: "#0f172a" }}>Horario de clases (grupo)</h2>
+                    <p style={{ margin: 0, fontSize: "11px", color: "#64748b", fontWeight: 600, textTransform: "uppercase" }}>Resumen del curso seleccionado</p>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: "0 24px 24px 24px" }}>
+                {newScheduleGroup === "" ? (
+                   <div style={{ textAlign: "center", padding: "40px", background: "#f8fafc", borderRadius: "24px", border: "1px dashed #e2e8f0", marginTop: "20px" }}>
+                     <p style={{ color: "#64748b", fontWeight: 600 }}>Selecciona un grupo a la izquierda para ver su horario.</p>
+                   </div>
+                ) : selectedScheduleItems.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px", background: "#f8fafc", borderRadius: "24px", border: "1px dashed #e2e8f0", marginTop: "20px" }}>
+                     <p style={{ color: "#64748b", fontWeight: 600 }}>Este grupo no tiene horarios registrados.</p>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: "auto", marginTop: "20px" }}>
+                    <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: "11px", color: "#94a3b8", fontWeight: 800, textTransform: "uppercase" }}>DÍA</th>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: "11px", color: "#94a3b8", fontWeight: 800, textTransform: "uppercase" }}>HORA</th>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: "11px", color: "#94a3b8", fontWeight: 800, textTransform: "uppercase" }}>MATERIA</th>
+                          <th style={{ padding: "12px", textAlign: "center", fontSize: "11px", color: "#94a3b8", fontWeight: 800, textTransform: "uppercase" }}>ACCIONES</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedScheduleItems.map((item) => (
+                          <tr key={item.id} style={{ background: "#fff", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                            <td style={{ padding: "14px 12px", borderRadius: "12px 0 0 12px", fontWeight: 700, color: "#1e293b" }}>{item.day}</td>
+                            <td style={{ padding: "14px 12px", color: "#64748b", fontWeight: 500 }}>{item.startTime} - {item.endTime}</td>
+                            <td style={{ padding: "14px 12px", fontWeight: 800, color: "#4f46e5" }}>{item.subject}</td>
+                            <td style={{ padding: "14px 12px", borderRadius: "0 12px 12px 0", textAlign: "center" }}>
+                                <button 
+                                  onClick={() => handleDeleteSchedule(item.id)}
+                                  className="flex items-center justify-center mx-auto w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-200"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CUADRÍCULA SEMANAL */}
+            <div className="module-card">
+              <div className="module-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{ background: "#f5f3ff", color: "#4f46e5", padding: "10px", borderRadius: "14px" }}>
+                    <CalendarCheck size={24} />
+                  </div>
+                  <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>Horario de la Semana</h2>
+                </div>
+                <button 
+                  onClick={() => setShowSchedulePreview(true)} 
+                  className="secondary-button"
+                  style={{ background: "#f5f3ff", color: "#4f46e5", border: "1px solid #c7d2fe", padding: "10px 18px", borderRadius: "14px", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}
+                >
+                  <FileText size={16} />
+                  VISTA PREVIA PDF
+                </button>
+              </div>
+              <div style={{ padding: "24px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px" }}>
+                  {dayOrder.map(day => (
+                    <div key={day} style={{ background: "#f8fafc", borderRadius: "18px", padding: "12px", border: "1px solid #e2e8f0", minHeight: "200px" }}>
+                      <h3 style={{ fontSize: "11px", fontWeight: 900, color: "#4f46e5", textAlign: "center", textTransform: "uppercase", marginBottom: "12px", letterSpacing: "0.05em" }}>{day}</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {scheduleItems.filter(s => s.day === day).map(item => (
+                          <div key={item.id} style={{ background: "#fff", padding: "8px 10px", borderRadius: "12px", fontSize: "10px", border: "1px solid #f1f5f9", boxShadow: "0 2px 6px rgba(0,0,0,0.03)", position: "relative" }}>
+                            <div style={{ fontWeight: 800, color: "#94a3b8", fontSize: "9px" }}>{item.startTime}</div>
+                            <div style={{ fontWeight: 800, color: "#1e293b", marginTop: "2px" }}>{item.groupName}</div>
+                            <div style={{ color: "#64748b", fontSize: "9px", marginTop: "1px" }}>{item.subject}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
+    )}
 
-      <div className="module-card">
-        <div style={{ padding: "24px" }}>
-          <h2>Agregar Horario</h2>
-          <div style={{ padding: "24px", display: "grid", gap: "14px" }}>
-  <div>
-    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.7 }}>
-      GRUPO
-    </label>
 
-    <select
-      value={newScheduleGroup}
-      onChange={(e) => {
-        const value = e.target.value
-        setNewScheduleGroup(value === "" ? "" : Number(value))
-      }}
-      style={{
-        width: "100%",
-        height: "48px",
-        borderRadius: "14px",
-        border: "1px solid #dfe3f0",
-        padding: "0 14px",
-        fontSize: "15px",
-        background: "#fff",
-      }}
-    >
-      <option value="">Selecciona un grupo</option>
-
-      {orderedGroups.map((group) => (
-        <option key={group.id} value={group.id}>
-          {group.name}
-        </option>
-      ))}
-    </select>
-
-    <div style={{ display: "grid", gap: "14px", marginTop: "14px" }}>
-  <div>
-    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>
-      DÍA
-    </label>
-    <select
-      value={scheduleDay}
-      onChange={(e) => setScheduleDay(e.target.value)}
-      style={{
-        width: "100%",
-        height: "48px",
-        borderRadius: "14px",
-        border: "1px solid #dfe3f0",
-        padding: "0 14px",
-        fontSize: "15px",
-        background: "#fff",
-      }}
-    >
-      <option value="">Selecciona un día</option>
-      <option value="Lunes">Lunes</option>
-      <option value="Martes">Martes</option>
-      <option value="Miércoles">Miércoles</option>
-      <option value="Jueves">Jueves</option>
-      <option value="Viernes">Viernes</option>
-    </select>
-  </div>
-
-  <div>
-    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>
-      HORA INICIO
-    </label>
- <input
-  type="text"
-  value={scheduleStartTime}
-  onChange={(e) => setScheduleStartTime(formatTime(e.target.value))}
-  placeholder="Ej. 07:00"
-  style={{
-    width: "100%",
-    height: "48px",
-    borderRadius: "14px",
-    border: "1px solid #dfe3f0",
-    padding: "0 14px",
-    fontSize: "15px",
-    background: "#fff",
-  }}
-/>
-  </div>
-
-  <div>
-    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>
-      HORA FINAL
-    </label>
-    <input
-  type="text"
-  value={scheduleEndTime}
- onChange={(e) => setScheduleEndTime(formatTime(e.target.value))}
-  placeholder="Ej. 07:40"
-  style={{
-    width: "100%",
-    height: "48px",
-    borderRadius: "14px",
-    border: "1px solid #dfe3f0",
-    padding: "0 14px",
-    fontSize: "15px",
-    background: "#fff",
-  }}
-/>
-  </div>
-
-  <div>
-    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>
-      MATERIA
-    </label>
-    <input
-      type="text"
-    value={scheduleSubject}
-    onChange={(e) => setScheduleSubject(e.target.value)}
-    placeholder="Ej. Informática"
-    list="subject-suggestions"
-    style={{
-      width: "100%",
-      height: "48px",
-      borderRadius: "14px",
-      border: "1px solid #dfe3f0",
-      padding: "0 14px",
-      fontSize: "15px",
-      background: "#fff"
-      }}
-    />
-    <datalist id="subject-suggestions">
-    {subjectSuggestions.map((subject) => (
-      <option key={subject} value={subject} />
-    ))}
-  </datalist>
-
-  </div>
-
-      <div>
-  <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 600, opacity: 0.8 }}>
-    CANTIDAD DE LECCIONES
-  </label>
-
-  <select
-    value={scheduleLessons}
-    onChange={(e) => setScheduleLessons(e.target.value)}
-    style={{
-      width: "100%",
-      height: "48px",
-      borderRadius: "14px",
-      border: "1px solid #dfe3f0",
-      padding: "0 14px",
-      fontSize: "15px",
-      background: "#fff",
-    }}
-  >
-    {[1, 2, 3, 4, 5, 6].map((num) => (
-      <option key={num} value={String(num)}>
-        {num}
-      </option>
-    ))}
-          
-  </select>
-</div>
-
-  <button
-     onClick={handleAddSchedule}
-  style={{
-    height: "44px",
-    borderRadius: "12px",
-    background: "#1d4ed8",
-    color: "#fff",
-    fontWeight: 700,
-    cursor: "pointer",
-    }}
-  >
-    {editingScheduleId !== null ? "Guardar Cambios" : "Agregar Horario"}
-  </button>
-</div>   
-
-  </div>
-</div>
-
-        </div>
-      </div>
-    </div>
-  </section>
-  
-)}
- 
-   </header> 
-   </div>
 
 {activeSection === "attendance" && <AsistenciaPage session={session} academicPeriod={academicPeriod} />}
 {activeSection === "cotidiano" && (
@@ -3035,9 +2704,9 @@ async function handleImportStudents(file: File) {
           <div style={{ width: `${pdfProgress}%`, height: "100%", background: "#4f46e5", borderRadius: "999px", transition: "width 0.3s ease" }} />
         </div>
       </div>
-    </div>
-  </div>
-)}
+        </div>
+      </div>
+    )}
 
 {showPdfPreview && (
   <div style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "24px" }}>
