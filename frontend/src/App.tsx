@@ -70,6 +70,7 @@ function showAuthError() {
 
 function showToast(message: string, type: 'success' | 'error', setToast: any) {
   setToast({ message, type });
+  setTimeout(() => setToast(null), 3000);
 }
 
 export default function App() {
@@ -1798,15 +1799,20 @@ async function handleImportStudents(file: File) {
 </div> 
 
   {/* Selector de Periodo Académico (Opción B) */}
-  <div style={{ padding: "8px 32px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "24px" }}>
-    <span style={{ fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Periodo Lectivo:</span>
-    <div style={{ background: "#edf2f7", padding: "4px", borderRadius: "12px", display: "flex", gap: "4px" }}>
+  <div style={{ 
+    padding: "8px 32px", 
+    background: academicPeriod === 'semester2' ? "#ecfdf5" : "#f8fafc", 
+    borderBottom: academicPeriod === 'semester2' ? "2px solid #10b981" : "1px solid #e2e8f0", 
+    display: "flex", alignItems: "center", gap: "24px", transition: "all 0.3s" 
+  }}>
+    <span style={{ fontSize: "12px", fontWeight: 800, color: academicPeriod === 'semester2' ? "#047857" : "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", transition: "color 0.3s" }}>Periodo Lectivo:</span>
+    <div style={{ background: academicPeriod === 'semester2' ? "#d1fae5" : "#edf2f7", padding: "4px", borderRadius: "12px", display: "flex", gap: "4px", transition: "background 0.3s" }}>
       <button 
         onClick={() => setAcademicPeriod('semester1')}
         style={{ 
           padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 700, border: "none", cursor: "pointer", transition: "all 0.2s",
           background: academicPeriod === 'semester1' ? "#fff" : "transparent",
-          color: academicPeriod === 'semester1' ? "#4f46e5" : "#64748b",
+          color: academicPeriod === 'semester1' ? "#4f46e5" : (academicPeriod === 'semester2' ? "#059669" : "#64748b"),
           boxShadow: academicPeriod === 'semester1' ? "0 4px 6px -1px rgba(0, 0, 0, 0.1)" : "none"
         }}>
         I Semestre
@@ -1815,9 +1821,9 @@ async function handleImportStudents(file: File) {
         onClick={() => setAcademicPeriod('semester2')}
         style={{ 
           padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 700, border: "none", cursor: "pointer", transition: "all 0.2s",
-          background: academicPeriod === 'semester2' ? "#fff" : "transparent",
-          color: academicPeriod === 'semester2' ? "#4f46e5" : "#64748b",
-          boxShadow: academicPeriod === 'semester2' ? "0 4px 6px -1px rgba(0, 0, 0, 0.1)" : "none"
+          background: academicPeriod === 'semester2' ? "#10b981" : "transparent",
+          color: academicPeriod === 'semester2' ? "#ffffff" : "#64748b",
+          boxShadow: academicPeriod === 'semester2' ? "0 4px 12px -2px rgba(16, 185, 129, 0.4)" : "none"
         }}>
         II Semestre
       </button>
@@ -1826,7 +1832,7 @@ async function handleImportStudents(file: File) {
         style={{ 
           padding: "6px 16px", borderRadius: "8px", fontSize: "13px", fontWeight: 700, border: "none", cursor: "pointer", transition: "all 0.2s",
           background: academicPeriod === 'annual' ? "#fff" : "transparent",
-          color: academicPeriod === 'annual' ? "#4f46e5" : "#64748b",
+          color: academicPeriod === 'annual' ? "#4f46e5" : (academicPeriod === 'semester2' ? "#059669" : "#64748b"),
           boxShadow: academicPeriod === 'annual' ? "0 4px 6px -1px rgba(0, 0, 0, 0.1)" : "none"
         }}>
         Total Anual
@@ -1898,19 +1904,33 @@ async function handleImportStudents(file: File) {
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>MATERIA</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej. Informática" 
-                    value={scheduleSubject} 
-                    onChange={(e) => setScheduleSubject(e.target.value)} 
-                    list="subject-suggestions-repaired-v3" 
-                    style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", fontWeight: 500 }} 
-                  />
-                  <datalist id="subject-suggestions-repaired-v3">
-                    {subjectSuggestions.map((s) => <option key={s} value={s} />)}
-                  </datalist>
+                <div style={{ display: "grid", gridTemplateColumns: "60% 40%", gap: "12px" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>MATERIA</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. Informática" 
+                      value={scheduleSubject} 
+                      onChange={(e) => setScheduleSubject(e.target.value)} 
+                      list="subject-suggestions-repaired-v3" 
+                      style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", fontWeight: 500 }} 
+                    />
+                    <datalist id="subject-suggestions-repaired-v3">
+                      {subjectSuggestions.map((s) => <option key={s} value={s} />)}
+                    </datalist>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", fontWeight: 700, color: "#475569" }}>LECCIONES</label>
+                    <select
+                      value={scheduleLessons}
+                      onChange={(e) => setScheduleLessons(e.target.value)}
+                      style={{ width: "100%", height: "48px", borderRadius: "14px", border: "1px solid #dfe3f0", padding: "0 14px", fontSize: "15px", background: "#fff", fontWeight: 500 }}
+                    >
+                      {[1, 2, 3, 4, 5, 6].map(num => (
+                        <option key={num} value={num}>{num}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <button
@@ -1994,6 +2014,12 @@ async function handleImportStudents(file: File) {
                   </div>
                   <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>Horario de la Semana</h2>
                 </div>
+                
+                <div style={{ background: "#eff6ff", color: "#1e40af", padding: "6px 12px", borderRadius: "8px", fontWeight: 800, fontSize: "12px", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>TOTAL SEMANAL:</span>
+                  <span style={{ background: "#3b82f6", color: "#fff", padding: "2px 8px", borderRadius: "6px" }}>{totalLessonsTeacher} LECCIONES</span>
+                </div>
+
                 <button 
                   onClick={() => setShowSchedulePreview(true)} 
                   className="secondary-button"
@@ -2011,9 +2037,10 @@ async function handleImportStudents(file: File) {
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                         {scheduleItems.filter(s => s.day === day).map(item => (
                           <div key={item.id} style={{ background: "#fff", padding: "8px 10px", borderRadius: "12px", fontSize: "10px", border: "1px solid #f1f5f9", boxShadow: "0 2px 6px rgba(0,0,0,0.03)", position: "relative" }}>
-                            <div style={{ fontWeight: 800, color: "#94a3b8", fontSize: "9px" }}>{item.startTime}</div>
+                            <div style={{ fontWeight: 800, color: "#94a3b8", fontSize: "9px" }}>{item.startTime} - {item.endTime}</div>
                             <div style={{ fontWeight: 800, color: "#1e293b", marginTop: "2px" }}>{item.groupName}</div>
-                            <div style={{ color: "#64748b", fontSize: "9px", marginTop: "1px" }}>{item.subject}</div>
+                            <div style={{ color: "#64748b", fontSize: "9px", marginTop: "1px", fontWeight: 600 }}>{item.subject}</div>
+                            <div style={{ color: "#4f46e5", fontSize: "9px", marginTop: "2px", fontWeight: 800 }}>Lecciones: {item.lessons}</div>
                           </div>
                         ))}
                       </div>
@@ -2301,18 +2328,7 @@ async function handleImportStudents(file: File) {
                         : "Sin apoyo"}
                     </span>
                   </div>
-                  {selectedGroupData?.guia_name && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Profesor Guía</span>
-                      <span style={{ fontSize: "14px", color: "#334155", fontWeight: 500 }}>{selectedGroupData.guia_name}</span>
-                    </div>
-                  )}
-                  {selectedGroupData?.guia_phone && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Teléfono Guía</span>
-                      <span style={{ fontSize: "14px", color: "#334155", fontWeight: 500 }}>{selectedGroupData.guia_phone}</span>
-                    </div>
-                  )}
+
                 </div>
               </div>
             ));
