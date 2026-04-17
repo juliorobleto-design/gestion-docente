@@ -387,8 +387,14 @@ const activeGroupStudentsCount = selectedGroup
   }
 }, [])
   
-  const [now] = useState(new Date())
+  const [now, setNow] = useState(new Date());
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 const orderedGroups = useMemo(() => {
   const groupsWithCounts = groups.map((group) => ({
     ...group,
