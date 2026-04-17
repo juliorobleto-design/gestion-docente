@@ -58,6 +58,76 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [toastLocal, setToastLocal] = useState<{message: string, type: 'success'|'error'} | null>(null);
+
+  const showToast = (message: string, type: 'success'|'error') => {
+    setToastLocal({ message, type });
+    setTimeout(() => setToastLocal(null), 3500);
+  };
+
+  const handleExportJSON = () => {
+    try {
+      const backupData = {
+        _isGestionDocenteBackup: true,
+        version: "1.0",
+        timestamp: new Date().toISOString(),
+        settings: localSettings,
+        groupConfigs: groupConfigs
+      };
+      
+      const dataStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Respaldo_GD_${new Date().toLocaleDateString('es-CR').replace(/\//g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showToast("¡Configuración exportada con éxito!", "success");
+    } catch (e) {
+      showToast("Error al intentar exportar el archivo.", "error");
+    }
+  };
+
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+
+        if (!parsed._isGestionDocenteBackup) {
+          throw new Error("Firma inválida: no es un archivo de Gestión Docente");
+        }
+
+        if (parsed.settings) {
+          setLocalSettings(parsed.settings);
+          setAppSettings(parsed.settings);
+          localStorage.setItem("gestion_docente_settings", JSON.stringify(parsed.settings));
+        }
+
+        if (parsed.groupConfigs) {
+          setGroupConfigs(parsed.groupConfigs);
+          localStorage.setItem("gestion_docente_group_configs", JSON.stringify(parsed.groupConfigs));
+        }
+
+        showToast("¡Configuración restaurada con éxito!", "success");
+      } catch (err) {
+        showToast("Archivo inválido o corrupto.", "error");
+      }
+      
+      if (importInputRef.current) importInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
   // Current group config
   const currentConfig = selectedGroupId ? (groupConfigs[selectedGroupId] || { minimumPassingGrade: 65 }) : { minimumPassingGrade: 65 };
   const [localMinGrade, setLocalMinGrade] = useState<number>(currentConfig.minimumPassingGrade);
@@ -422,10 +492,17 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0, color: "#334155" }}>Respaldo de Datos</h3>
              </div>
              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <button style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "#4f46e5", color: "#fff", padding: "12px", borderRadius: "10px", fontWeight: 700, fontSize: "13px", border: "none", cursor: "pointer", transition: "all 0.2s" }} className="hover:bg-indigo-700">
+                <button onClick={handleExportJSON} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "#4f46e5", color: "#fff", padding: "12px", borderRadius: "10px", fontWeight: 700, fontSize: "13px", border: "none", cursor: "pointer", transition: "all 0.2s" }} className="hover:bg-indigo-700">
                    <FileOutput size={16} /> Exportar JSON
                 </button>
-                <button style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "#f8fafc", color: "#475569", padding: "12px", borderRadius: "10px", fontWeight: 700, fontSize: "13px", border: "1px solid #cbd5e1", cursor: "pointer", transition: "all 0.2s" }} className="hover:bg-slate-100">
+                <input 
+                  type="file" 
+                  accept=".json" 
+                  style={{ display: "none" }} 
+                  ref={importInputRef} 
+                  onChange={handleImportJSON} 
+                />
+                <button onClick={() => importInputRef.current?.click()} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "#f8fafc", color: "#475569", padding: "12px", borderRadius: "10px", fontWeight: 700, fontSize: "13px", border: "1px solid #cbd5e1", cursor: "pointer", transition: "all 0.2s" }} className="hover:bg-slate-100">
                    <FileInput size={16} /> Importar JSON
                 </button>
              </div>
@@ -765,10 +842,29 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
         </div>
       )}
 
+      {/* Toast Notification para JSON */}
+      {toastLocal && (
+        <div style={{
+          position: "fixed", bottom: "32px", right: "32px", zIndex: 9999,
+          background: toastLocal.type === "success" ? "#10b981" : "#ef4444",
+          color: "#fff", padding: "14px 24px", borderRadius: "12px",
+          fontWeight: 700, fontSize: "14px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+          display: "flex", alignItems: "center", gap: "10px",
+          animation: "slideUpToast 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+        }}>
+          {toastLocal.type === "success" ? <Check size={18} /> : <AlertCircle size={18} />}
+          {toastLocal.message}
+        </div>
+      )}
+
       {/* Animation */}
       <style>{`
         @keyframes fadeInModal {
           from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUpToast {
+          from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
