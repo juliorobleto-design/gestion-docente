@@ -18,13 +18,7 @@ export default function Auth({ externalError }: AuthProps) {
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [authMode, setAuthMode] = useState<'magiclink' | 'password'>('magiclink');
 
-  const validateEmail = (email: string) => {
-    return String(email)
-      .toLowerCase()
-      .match(
-        /^(([^<>()[\]\\.,;:\s@"]+(\.[ ^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
-      );
-  };
+  const validateEmail = (em: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em.toLowerCase());
 
   const validateAndCheck = async (): Promise<string | null> => {
     if (!email.trim()) return 'Por favor, ingresa tu correo electrónico.';
