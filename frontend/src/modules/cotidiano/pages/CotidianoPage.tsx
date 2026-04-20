@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import CotidianoGrid from "../components/CotidianoGrid";
 import { Plus, Trash2, Check, Sparkles, Save, FilePlus, Copy } from "lucide-react";
 import { showAuthError } from "../../../utils/authError";
 
@@ -27,13 +28,20 @@ export default function CotidianoPage({
   session, 
   students = [], 
   selectedGroupId, 
-  groupName 
+  groupName,
+  academicPeriod,
+  evaluationRubrics = [],
+  groups = []
 }: { 
   session?: any; 
   students?: any[]; 
   selectedGroupId?: number | null; 
   groupName?: string; 
+  academicPeriod?: 'semester1' | 'semester2' | 'annual';
+  evaluationRubrics?: { id: string; name: string; percentage: number }[];
+  groups?: { id: number; name: string }[];
 }) {
+  const [viewMode, setViewMode] = useState<"grid" | "designer">("grid");
   const [selectedStudentId, setSelectedStudentId] = useState<number | "">("");
   const [rubrics, setRubrics] = useState<Rubric[]>([
     {
@@ -240,62 +248,79 @@ export default function CotidianoPage({
       
       {/* Top action bar: Sticky for easy access */}
       <div style={{ position: "sticky", top: "84px", zIndex: 40, background: "rgba(248, 250, 252, 0.95)", backdropFilter: "blur(12px)", padding: "16px 0", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px", margin: "-20px -20px 24px -20px", paddingLeft: "20px", paddingRight: "20px" }}>
-         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
              <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Cotidiano</h1>
-             <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 700, background: "#e2e8f0", padding: "4px 10px", borderRadius: "8px", textTransform: "uppercase" }}>Diseñador de Rúbricas</span>
+             <div style={{ display: "flex", background: "#e2e8f0", borderRadius: "8px", padding: "4px" }}>
+                 <button 
+                    onClick={() => setViewMode("grid")}
+                    style={{ padding: "6px 14px", fontSize: "13px", fontWeight: 700, borderRadius: "6px", border: "none", cursor: "pointer", transition: "all 0.2s", background: viewMode === "grid" ? "#fff" : "transparent", color: viewMode === "grid" ? "#4f46e5" : "#64748b", boxShadow: viewMode === "grid" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}
+                 >
+                    Matriz Calificadora
+                 </button>
+                 <button 
+                    onClick={() => setViewMode("designer")}
+                    style={{ padding: "6px 14px", fontSize: "13px", fontWeight: 700, borderRadius: "6px", border: "none", cursor: "pointer", transition: "all 0.2s", background: viewMode === "designer" ? "#fff" : "transparent", color: viewMode === "designer" ? "#4f46e5" : "#64748b", boxShadow: viewMode === "designer" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}
+                 >
+                    Diseñador Rúbricas
+                 </button>
+             </div>
          </div>
          
-         {/* Global totals summary */}
-         <div style={{ display: "flex", alignItems: "center", gap: "24px", background: "#fff", padding: "8px 24px", borderRadius: "100px", border: "2px solid #e0e7ff", boxShadow: "0 4px 12px rgba(79, 70, 229, 0.08)" }}>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Acumulado Global</span>
-            <div style={{ fontSize: "24px", fontWeight: 800, color: "#4f46e5", display: "flex", alignItems: "baseline", gap: "4px" }}>
-              {globalTotals.obtained} <span style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 700 }}>/ {globalTotals.max} pts</span>
-            </div>
-         </div>
+         {/* Global totals summary (Only in Designer) */}
+         {viewMode === "designer" && (
+           <div style={{ display: "flex", alignItems: "center", gap: "24px", background: "#fff", padding: "8px 24px", borderRadius: "100px", border: "2px solid #e0e7ff", boxShadow: "0 4px 12px rgba(79, 70, 229, 0.08)" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>Acumulado Global</span>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#4f46e5", display: "flex", alignItems: "baseline", gap: "4px" }}>
+                {globalTotals.obtained} <span style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 700 }}>/ {globalTotals.max} pts</span>
+              </div>
+           </div>
+         )}
 
-          <div style={{ display: "flex", gap: "12px" }}>
-            <div style={{ position: "relative", minWidth: "240px" }}>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value === "" ? "" : Number(e.target.value))}
-                style={{
-                  width: "100%", padding: "10px 16px", borderRadius: "10px",
-                  border: "2px solid", borderColor: selectedStudentId ? "#4f46e5" : "#cbd5e1",
-                  fontSize: "14px", fontWeight: 700, outline: "none", cursor: "pointer",
-                  background: "#fff", color: "#0f172a"
-                }}
+          {viewMode === "designer" && (
+            <div style={{ display: "flex", gap: "12px" }}>
+              <div style={{ position: "relative", minWidth: "240px" }}>
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value === "" ? "" : Number(e.target.value))}
+                  style={{
+                    width: "100%", padding: "10px 16px", borderRadius: "10px",
+                    border: "2px solid", borderColor: selectedStudentId ? "#4f46e5" : "#cbd5e1",
+                    fontSize: "14px", fontWeight: 700, outline: "none", cursor: "pointer",
+                    background: "#fff", color: "#0f172a"
+                  }}
+                >
+                  <option value="">Seleccionar Estudiante...</option>
+                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <button onClick={addRubric} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", background: "#fff", color: "#0f172a", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "all 0.2s", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} className="hover:bg-slate-50 hover:border-slate-400">
+                <Plus size={18} />
+                Nueva Rúbrica
+              </button>
+              <button 
+                onClick={handleSaveTodo}
+                disabled={!selectedStudentId}
+                style={{ 
+                  display: "flex", alignItems: "center", gap: "6px", 
+                  padding: "10px 24px", background: selectedStudentId ? "#4f46e5" : "#94a3b8", 
+                  color: "#fff", border: "none", borderRadius: "10px", 
+                  fontWeight: 700, fontSize: "14px", 
+                  cursor: selectedStudentId ? "pointer" : "not-allowed", 
+                  transition: "background 0.2s", 
+                  boxShadow: selectedStudentId ? "0 4px 12px rgba(79, 70, 229, 0.2)" : "none" 
+                }} 
+                className={selectedStudentId ? "hover:bg-indigo-700" : ""}
               >
-                <option value="">Seleccionar Estudiante...</option>
-                {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+                 <Save size={18} />
+                 Guardar Evaluación
+              </button>
             </div>
-
-            <button onClick={addRubric} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "10px 18px", background: "#fff", color: "#0f172a", border: "1px solid #cbd5e1", borderRadius: "10px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "all 0.2s", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} className="hover:bg-slate-50 hover:border-slate-400">
-              <Plus size={18} />
-              Nueva Rúbrica
-            </button>
-            <button 
-              onClick={handleSaveTodo}
-              disabled={!selectedStudentId}
-              style={{ 
-                display: "flex", alignItems: "center", gap: "6px", 
-                padding: "10px 24px", background: selectedStudentId ? "#4f46e5" : "#94a3b8", 
-                color: "#fff", border: "none", borderRadius: "10px", 
-                fontWeight: 700, fontSize: "14px", 
-                cursor: selectedStudentId ? "pointer" : "not-allowed", 
-                transition: "background 0.2s", 
-                boxShadow: selectedStudentId ? "0 4px 12px rgba(79, 70, 229, 0.2)" : "none" 
-              }} 
-              className={selectedStudentId ? "hover:bg-indigo-700" : ""}
-            >
-               <Save size={18} />
-               Guardar Evaluación
-            </button>
-          </div>
+          )}
         </div>
 
         {/* Identity Banner: Lavender / Indigo Suave - Sticky for visibility during scroll */}
-        {selectedStudent && (
+        {viewMode === "designer" && selectedStudent && (
           <div style={{
             position: "sticky",
             top: "155px", // Positions it right below the main sticky header (84px + header height)
@@ -321,7 +346,17 @@ export default function CotidianoPage({
           </div>
         )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
+      {viewMode === "grid" ? (
+        <CotidianoGrid 
+          students={students} 
+          session={session}
+          selectedGroupId={selectedGroupId}
+          academicPeriod={academicPeriod}
+          evaluationRubrics={evaluationRubrics}
+          groups={groups}
+        />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
         {rubrics.map((rubric, rIndex) => {
           
           const maxPts = rubric.levels.length > 0 ? Math.max(...rubric.levels.map(l => l.points)) : 0;
@@ -547,7 +582,7 @@ export default function CotidianoPage({
           );
         })}
       </div>
-      
+      )}
     </section>
   );
 }

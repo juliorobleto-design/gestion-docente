@@ -1645,8 +1645,8 @@ async function handleImportStudents(file: File) {
               </div>
 
              <div className="headline">
-              <h1 className="text-2xl font-bold text-gray-800 tracking-tight leading-none mb-1">{selectedGroupName || "Sin grupos"}</h1>
-              <p className="text-gray-500 font-medium text-[12px] uppercase tracking-wider">Panel de control educativo</p>
+              <h1 className="text-lg font-bold text-gray-800 tracking-tight leading-none uppercase" style={{ letterSpacing: "0.05em" }}>Panel de Control Educativo</h1>
+              <p className="text-gray-500 font-semibold text-[13px] tracking-wide">{selectedGroupName || "Sin grupos"}</p>
             </div>
 
             </div>
@@ -2069,6 +2069,9 @@ async function handleImportStudents(file: File) {
     students={students} 
     selectedGroupId={selectedGroup}
     groupName={selectedGroupName}
+    academicPeriod={academicPeriod}
+    evaluationRubrics={stableEvaluationRubrics}
+    groups={stableGroups}
   />
 )}
 {activeSection === "settings" && <ConfiguracionPage session={session} appSettings={appSettings} setAppSettings={setAppSettings} groups={stableGroups} selectedGroupId={selectedGroup} groupConfigs={groupConfigs} setGroupConfigs={setGroupConfigs} />}

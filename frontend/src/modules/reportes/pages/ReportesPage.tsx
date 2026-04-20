@@ -65,7 +65,9 @@ export default function ReportesPage({
   const [toDate, setToDate] = useState<string>(new Date().toISOString().slice(0, 10));
 
   // Derived
-  const filteredStudents = allStudents.filter(s => s.group_id === Number(selectedGroup));
+  const filteredStudents = allStudents
+    .filter(s => s.group_id === Number(selectedGroup))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
   const selectedSectionsCount = Object.values(sections).filter(Boolean).length;
   const currentGroupName = groups.find(g => g.id === Number(selectedGroup))?.name || "Grupo";
 
@@ -187,50 +189,73 @@ export default function ReportesPage({
         }
       }
 
-      // --- COTIDIANO (Summary) ---
+      // --- COTIDIANO (Detallado con columnas individuales) ---
       if (sections.cotidiano) {
         if (currentY > 240) { doc.addPage(); currentY = 25; }
         doc.setFontSize(12);
-        doc.setTextColor(37, 99, 235); // blue-600
-        doc.text("TRABAJO COTIDIANO", margin, currentY);
+        doc.setTextColor(37, 99, 235);
+        doc.text("TRABAJO COTIDIANO - DETALLE POR ASIGNACIÓN", margin, currentY);
         currentY += 6;
 
+        const periodToUse = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+
+        // Cargar configuración de columnas para obtener nombres
+        const { data: colConfig } = await supabase
+          .from("cotidiano_columns_config")
+          .select("columns_data")
+          .eq("group_id", selectedGroup)
+          .eq("period", periodToUse)
+          .maybeSingle();
+
+        // Cargar datos de estudiantes
         const { data: cwData } = await supabase
           .from("daily_work_scores")
-          .select("*")
+          .select("student_id, score, total_points, matrix_cells")
           .in("student_id", studentIds)
-          .eq("period", academicPeriod === 'annual' ? 'semester1' : academicPeriod);
+          .eq("period", periodToUse);
 
-        if (!cwData || cwData.length === 0) {
+        if (!cwData || cwData.length === 0 || !colConfig?.columns_data) {
           doc.setFontSize(10);
           doc.setTextColor(148, 163, 184);
           doc.text("Sin datos de trabajo cotidiano registrados.", margin, currentY + 5);
           currentY += 15;
         } else {
-          const cwMap: Record<number, { score: number, total: number }> = {};
-          studentIds.forEach(id => cwMap[id] = { score: 0, total: 0 });
-          cwData.forEach(d => {
-            if (cwMap[d.student_id]) {
-              cwMap[d.student_id].score += d.score || 0;
-              cwMap[d.student_id].total += d.total_points || 0;
-            }
-          });
+          const columnsConfig = colConfig.columns_data as { id: string; name: string; type: string }[];
+          
+          // Construir headers: Estudiante + cada columna + Promedio
+          const headers = ["Estudiante", ...columnsConfig.map(c => c.name), "Promedio"];
 
+          // Construir filas
           const cwRows = studentIds.map(id => {
             const s = allStudents.find(st => st.id === id);
-            const stats = cwMap[id];
-            const pct = stats.total > 0 ? ((stats.score / stats.total) * 100).toFixed(1) : "0";
-            return [s?.name || "—", `${stats.score} / ${stats.total}`, `${pct}%`];
+            const studentRecord = cwData.find(d => d.student_id === id);
+            const cells = (studentRecord?.matrix_cells || {}) as Record<string, { value: number | "" }>;
+            
+            // Valores de cada columna
+            const colValues = columnsConfig.map(col => {
+              const val = cells[col.id]?.value;
+              return typeof val === "number" ? `${val}%` : "—";
+            });
+
+            // Promedio
+            const pct = studentRecord?.total_points && studentRecord.total_points > 0
+              ? ((studentRecord.score / studentRecord.total_points) * 100).toFixed(1)
+              : "0";
+
+            return [s?.name || "—", ...colValues, `${pct}%`];
           });
 
           autoTable(doc, {
             startY: currentY,
-            head: [["Estudiante", "Puntos Obtenidos", "Porcentaje"]],
+            head: [headers],
             body: cwRows,
             theme: "striped",
-            headStyles: { fillColor: [37, 99, 235], fontSize: 9 },
-            styles: { fontSize: 8 },
-            margin: { left: margin, right: margin }
+            headStyles: { fillColor: [37, 99, 235], fontSize: 7, cellPadding: 2 },
+            styles: { fontSize: 7, cellPadding: 2 },
+            margin: { left: margin, right: margin },
+            columnStyles: {
+              0: { cellWidth: 40 }, // Estudiante
+            }
           });
           currentY = (doc as any).lastAutoTable.finalY + 15;
         }

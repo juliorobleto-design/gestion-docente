@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { showAuthError } from "../../../utils/authError";
 import { AlertTriangle, BarChart3, Award, X, RotateCcw, Calculator, Save, Check, Loader2 } from "lucide-react";
 import { supabase } from "../../../supabaseClient";
@@ -49,6 +49,18 @@ function isAutoSourcRubric(name: string): boolean {
   return isAttendanceRubric(name) || isCotidianoRubric(name);
 }
 
+// Mapeo de nombres de rúbricas dinámicas a columnas fijas en la tabla "grades"
+function rubricToColumn(name: string): string | null {
+  const n = name.toUpperCase().trim();
+  if (n.includes("TAREA")) return "projects";
+  if (n.includes("PRUEBA 2") || n === "PRUEBA2") return "test2";
+  if (n.includes("PRUEBA 1") || n === "PRUEBA1" || n.includes("PRUEBA")) return "test1";
+  if (n.includes("PORTAFOLIO") || n.includes("PORTFOLIO")) return "portfolio";
+  if (n.includes("DEMOSTRACI") || n.includes("DEMONSTR")) return "demonstration";
+  if (n.includes("SUMATIVO") || n.includes("INSTRUMENTO")) return "sumative_instrument";
+  return null;
+}
+
 // ═══════════════════════════════════════════════════════════
 //  COMPONENT
 // ═══════════════════════════════════════════════════════════
@@ -86,6 +98,26 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   const [isSaving, setIsSaving] = useState(false);
   const [loadingManual, setLoadingManual] = useState(false);
   const [annualData, setAnnualData] = useState<Record<number, { s1: number | null, s2: number | null }>>({});
+  const [isDirtyNotas, setIsDirtyNotas] = useState(false);
+  const [lastSavedNotas, setLastSavedNotas] = useState<string | null>(null);
+  const autoSaveNotasRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualGradesRef = useRef(manualGrades);
+
+  // Sync ref de manualGrades
+  useEffect(() => { manualGradesRef.current = manualGrades; }, [manualGrades]);
+
+  // AUTO-SAVE: Guardar notas manuales 3 seg después del último cambio
+  useEffect(() => {
+    if (isDirtyNotas && Object.keys(manualGradesRef.current).length > 0) {
+      if (autoSaveNotasRef.current) clearTimeout(autoSaveNotasRef.current);
+      autoSaveNotasRef.current = setTimeout(() => {
+        saveManualGrades();
+      }, 3000);
+    }
+    return () => {
+      if (autoSaveNotasRef.current) clearTimeout(autoSaveNotasRef.current);
+    };
+  }, [isDirtyNotas, manualGrades]);
 
   // ═══════════════════════════════════════
   //  LOAD REAL DATA FROM SOURCES
@@ -150,28 +182,36 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
     const periodToLoad = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
 
     try {
+      const studentIds = students.map(s => s.id);
       const { data, error } = await supabase
         .from("grades")
         .select("*")
-        .eq("group_id", groupId)
+        .in("student_id", studentIds)
         .eq("period", periodToLoad);
 
       if (error) throw error;
 
       const gradesMap: Record<number, Record<string, number | null>> = {};
       (data || []).forEach(row => {
-        if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
-        gradesMap[row.student_id][row.rubric_id] = row.score;
+        // Mapear columnas fijas de la DB a rubric IDs dinámicos
+        activeRubrics.forEach(rubric => {
+          if (!isAutoSourcRubric(rubric.name)) {
+            const colName = rubricToColumn(rubric.name);
+            if (colName && row[colName] !== null && row[colName] !== undefined) {
+              if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
+              gradesMap[row.student_id][rubric.id] = row[colName];
+            }
+          }
+        });
       });
 
       setManualGrades(gradesMap);
-    } catch (err) {
-      console.error("Error loading manual grades:", err);
-      setToast({ message: "No se pudieron cargar las notas", type: "error" });
+    } catch (err: any) {
+      console.warn("[Notas] Error cargando notas manuales:", err?.message || err);
     } finally {
       setLoadingManual(false);
     }
-  }, [groupId, students, academicPeriod, setToast]);
+  }, [groupId, students, academicPeriod, activeRubrics]);
 
   const loadAnnualGrades = useCallback(async () => {
     if (!groupId || students.length === 0) return;
@@ -277,6 +317,37 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
 
       if (cancelled) return;
 
+      // Cargar notas de Cotidiano desde daily_work_scores
+      let cotidianoData: Record<number, number | null> = {};
+      const cotidianoRubric = activeRubrics.find(r => isCotidianoRubric(r.name));
+      if (cotidianoRubric) {
+        try {
+          const studentIds = students.map(s => s.id);
+          const periodForCotidiano = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+          const { data: cwData, error: cwErr } = await supabase
+            .from("daily_work_scores")
+            .select("student_id, score, total_points")
+            .in("student_id", studentIds)
+            .eq("period", periodForCotidiano);
+
+          if (!cwErr && cwData) {
+            studentIds.forEach(id => { cotidianoData[id] = null; });
+            cwData.forEach(d => {
+              if (d.total_points && d.total_points > 0) {
+                // score ya es el promedio porcentual aplicado al rubro
+                // Convertimos de vuelta a porcentaje base (0-100) para que Notas lo pondere
+                const pctBase = (d.score / d.total_points) * 100;
+                cotidianoData[d.student_id] = Math.round(pctBase * 100) / 100;
+              }
+            });
+          }
+        } catch (e) {
+          console.error("Error loading cotidiano grades:", e);
+        }
+      }
+
+      if (cancelled) return;
+
       const newAutoGrades: Record<number, Record<string, number | null>> = {};
       students.forEach(s => {
         newAutoGrades[s.id] = {};
@@ -284,7 +355,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
           if (isAttendanceRubric(rubric.name)) {
             newAutoGrades[s.id][rubric.id] = attendanceData[s.id] ?? null;
           } else if (isCotidianoRubric(rubric.name)) {
-            newAutoGrades[s.id][rubric.id] = null;
+            newAutoGrades[s.id][rubric.id] = cotidianoData[s.id] ?? null;
           }
         });
       });
@@ -304,49 +375,66 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
     if (academicPeriod === 'annual') return;
     if (!groupId) return;
 
+    const currentGrades = manualGradesRef.current;
     setIsSaving(true);
     try {
-      const gradesToInsert: any[] = [];
-      
-      students.forEach(student => {
-        const studentGrades = manualGrades[student.id] || {};
+      for (const student of students) {
+        const studentGrades = currentGrades[student.id] || {};
+        
+        // Construir objeto con columnas fijas
+        const updateData: Record<string, any> = {
+          updated_at: new Date().toISOString()
+        };
+        
+        let hasData = false;
         activeRubrics.forEach(rubric => {
           if (!isAutoSourcRubric(rubric.name)) {
             const score = studentGrades[rubric.id];
-            if (score !== null && score !== undefined) {
-              gradesToInsert.push({
-                student_id: student.id,
-                rubric_id: rubric.id,
-                group_id: groupId,
-                period: academicPeriod,
-                score: score,
-                owner_id: session.user.id,
-                updated_at: new Date().toISOString()
-              });
+            const colName = rubricToColumn(rubric.name);
+            if (colName && score !== null && score !== undefined) {
+              updateData[colName] = score;
+              hasData = true;
             }
           }
         });
-      });
- 
-       if (gradesToInsert.length === 0) {
-         setToast({ message: "No hay notas nuevas para guardar", type: "success" });
-         return;
-       }
- 
-       const { error } = await supabase
-         .from("grades")
-         .upsert(gradesToInsert, { 
-           onConflict: 'student_id, rubric_id, group_id, period' 
-         });
- 
-       if (error) throw error;
-       setToast({ message: "Notas guardadas correctamente", type: "success" });
-     } catch (err) {
-       console.error("Error saving grades:", err);
-       setToast({ message: "Error al guardar las notas", type: "error" });
-     } finally {
-       setIsSaving(false);
-     }
+        
+        if (!hasData) continue;
+
+        // Verificar si ya existe registro para este estudiante/periodo
+        const { data: existing } = await supabase
+          .from("grades")
+          .select("id")
+          .eq("student_id", student.id)
+          .eq("period", academicPeriod)
+          .maybeSingle();
+
+        if (existing) {
+          const { error } = await supabase
+            .from("grades")
+            .update(updateData)
+            .eq("id", existing.id);
+          if (error) console.error("Error actualizando nota:", error);
+        } else {
+          const { error } = await supabase
+            .from("grades")
+            .insert({
+              student_id: student.id,
+              period: academicPeriod,
+              owner_id: session.user.id,
+              ...updateData
+            });
+          if (error) console.error("Error insertando nota:", error);
+        }
+      }
+
+      setIsDirtyNotas(false);
+      setLastSavedNotas(new Date().toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" }));
+    } catch (err) {
+      console.error("Error saving grades:", err);
+      setToast({ message: "Error al guardar las notas", type: "error" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // ═══════════════════════════════════════
@@ -364,7 +452,21 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   }
 
   function setGrade(studentId: number, rubricId: string, value: string) {
-    const parsed = value === "" ? null : parseFloat(value);
+    // División Inteligente: si el valor contiene "/", convertir a porcentaje
+    let finalValue = value;
+    if (value.includes("/")) {
+      const parts = value.split("/");
+      const obtained = parseFloat(parts[0]);
+      const total = parseFloat(parts[1]);
+      if (!isNaN(obtained) && !isNaN(total) && total > 0) {
+        const pct = Math.round((obtained / total) * 100 * 100) / 100;
+        finalValue = String(Math.min(100, Math.max(0, pct)));
+      } else {
+        return; // Fracción inválida, ignorar
+      }
+    }
+
+    const parsed = finalValue === "" ? null : parseFloat(finalValue);
     const clamped = parsed !== null ? Math.min(100, Math.max(0, parsed)) : null;
 
     setManualGrades(prev => ({
@@ -374,6 +476,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         [rubricId]: isNaN(clamped as number) ? null : clamped,
       },
     }));
+    setIsDirtyNotas(true);
   }
 
   function calculateFinalGrade(studentId: number): number | null {
@@ -538,6 +641,10 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
               )}
             </button>
           )}
+          
+          {/* Indicador Auto-guardado */}
+          {isDirtyNotas && <span style={{ fontSize: "12px", fontWeight: 700, color: "#f59e0b", background: "#fffbeb", padding: "4px 10px", borderRadius: "8px", border: "1px solid #fde68a", animation: "pulse 2s infinite" }}>⏳ Auto-guardando...</span>}
+          {!isDirtyNotas && lastSavedNotas && <span style={{ fontSize: "12px", fontWeight: 700, color: "#10b981", background: "#ecfdf5", padding: "4px 10px", borderRadius: "8px", border: "1px solid #a7f3d0" }}>✓ Guardado a las {lastSavedNotas}</span>}
 
           {/* Segmented Control: Puntos / % / Ambos */}
           <div style={{
@@ -614,22 +721,22 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
           STATS CARDS
           ═══════════════════════════════════════ */}
       {stats.count > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "24px" }}>
-          <div style={{ background: "#fff", borderRadius: "14px", padding: "16px 20px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-            <div style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "6px" }}>Promedio General</div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: getGradeColor(stats.avg) }}>{stats.avg}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "12px" }}>
+          <div style={{ background: "#fff", borderRadius: "12px", padding: "10px 16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+            <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "2px" }}>Promedio General</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: getGradeColor(stats.avg) }}>{stats.avg}</div>
           </div>
-          <div style={{ background: "#fff", borderRadius: "14px", padding: "16px 20px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-            <div style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "6px" }}>Nota Más Alta</div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "#10b981" }}>{stats.max}</div>
+          <div style={{ background: "#fff", borderRadius: "12px", padding: "10px 16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+            <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "2px" }}>Nota Más Alta</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#10b981" }}>{stats.max}</div>
           </div>
-          <div style={{ background: "#fff", borderRadius: "14px", padding: "16px 20px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-            <div style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "6px" }}>Nota Más Baja</div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "#ef4444" }}>{stats.min}</div>
+          <div style={{ background: "#fff", borderRadius: "12px", padding: "10px 16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+            <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "2px" }}>Nota Más Baja</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#ef4444" }}>{stats.min}</div>
           </div>
-          <div style={{ background: "#fff", borderRadius: "14px", padding: "16px 20px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
-            <div style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "6px" }}>Evaluados</div>
-            <div style={{ fontSize: "28px", fontWeight: 800, color: "#4f46e5" }}>{stats.count}<span style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 700 }}> / {students.length}</span></div>
+          <div style={{ background: "#fff", borderRadius: "12px", padding: "10px 16px", border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.03)" }}>
+            <div style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", marginBottom: "2px" }}>Evaluados</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "#4f46e5" }}>{stats.count}<span style={{ fontSize: "13px", color: "#94a3b8", fontWeight: 700 }}> / {students.length}</span></div>
           </div>
         </div>
       )}
@@ -825,7 +932,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                         </>
                       ) : (
                         <>
-                          {activeRubrics.map(rubric => {
+                          {activeRubrics.map((rubric, rIndex) => {
                             const grade = getGrade(student.id, rubric.id);
                             const isAuto = isAutoSourcRubric(rubric.name);
                             const formatted = formatCell(grade, rubric);
@@ -854,14 +961,31 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                             return (
                               <td key={rubric.id} style={{ padding: "8px 10px", textAlign: "center" }}>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.5"
-                                  value={grade === null ? "" : grade}
-                                  onChange={e => setGrade(student.id, rubric.id, e.target.value)}
-                                  disabled={false}
+                                  type="text"
+                                  inputMode="decimal"
+                                  defaultValue={grade === null ? "" : grade}
+                                  key={`grade-${student.id}-${rubric.id}-${grade}`}
+                                  data-nrow={index}
+                                  data-ncol={rIndex}
+                                  onBlur={e => {
+                                    setGrade(student.id, rubric.id, e.target.value);
+                                    e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; e.target.style.boxShadow = "none";
+                                  }}
+                                  onKeyDown={e => {
+                                    const raw = (e.target as HTMLInputElement).value;
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      setGrade(student.id, rubric.id, raw);
+                                      // Mover foco a la celda de abajo
+                                      const nextRow = index + 1;
+                                      const nextInput = document.querySelector(
+                                        `input[data-nrow="${nextRow}"][data-ncol="${rIndex}"]`
+                                      ) as HTMLInputElement;
+                                      if (nextInput) nextInput.focus();
+                                    }
+                                  }}
                                   placeholder="—"
+                                  title="Escribe % (ej: 85) o fracción (ej: 17/20)"
                                   style={{
                                     width: "72px", padding: "8px 6px", borderRadius: "10px",
                                     border: "1px solid #e2e8f0", fontSize: "14px", fontWeight: 600,
@@ -873,7 +997,6 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                                     opacity: 1
                                   }}
                                   onFocus={e => { e.target.style.borderColor = "#6366f1"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(99, 102, 241, 0.1)"; }}
-                                  onBlur={e => { e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; e.target.style.boxShadow = "none"; }}
                                 />
                               </td>
                             );
@@ -914,7 +1037,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                           )}
                           {attendancePercent[student.id] !== null && (attendancePercent[student.id] || 0) < 80 && (
                             <span 
-                              title={`Asistencia: ${attendancePercent[student.id]}% (Mínimo 80%)`}
+                              title={`REAC 2026: Asistencia ${attendancePercent[student.id]}% — No cumple mínimo del 80% requerido`}
                               style={{ padding: "4px 8px", borderRadius: "6px", background: "#fffbeb", color: "#d97706", border: "1px solid #fef3c7", fontSize: "10px", fontWeight: 800, cursor: "help" }}
                             >
                               🟡 Asistencia
