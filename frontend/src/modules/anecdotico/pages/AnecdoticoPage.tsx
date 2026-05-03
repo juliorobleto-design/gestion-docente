@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../../supabaseClient";
 import { Loader2, ScrollText, Plus, Search, Trash2, Calendar, User, Users, Info, RefreshCw } from "lucide-react";
 import { showAuthError } from "../../../utils/authError";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 interface Group {
   id: number;
@@ -11,6 +12,9 @@ interface Group {
 interface Student {
   id: number;
   name: string;
+  first_name?: string | null;
+  last_name1?: string | null;
+  last_name2?: string | null;
   group_id: number;
 }
 
@@ -96,7 +100,7 @@ export default function AnecdoticoPage({ groups, allStudents, activeGroupId, ses
         const group = groups.find(g => g.id === r.group_id);
         return {
           ...r,
-          student_name: student?.name || "Estudiante no encontrado",
+          student_name: student ? buildStudentDisplayName(student) : "Estudiante no encontrado",
           group_name: group?.name || `Grupo ${r.group_id}`
         };
       });
@@ -380,7 +384,7 @@ export default function AnecdoticoPage({ groups, allStudents, activeGroupId, ses
                 >
                   <option value="">Seleccionar estudiante...</option>
                   {filteredStudents.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>{buildStudentDisplayName(s)}</option>
                   ))}
                 </select>
               </div>

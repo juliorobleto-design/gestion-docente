@@ -70,6 +70,9 @@ export const resolveStudentExcelColumns = (headers: string[]): ResolvedHeaders =
 
 export interface ImportedStudent {
   name: string;
+  first_name?: string | null;
+  last_name1?: string | null;
+  last_name2?: string | null;
   cedula: string | null;
   parent1_phone: string | null;
   parent2_phone: string | null;
@@ -122,19 +125,33 @@ export const parseStudentsFromExcel = (workbook: XLSX.WorkBook): ImportedStudent
     
     const students = dataRows.map(row => {
       let fullName = "";
+      let first_name: string | null = null;
+      let last_name1: string | null = null;
+      let last_name2: string | null = null;
       
       if (mapping.piadMode) {
-        // Lógica PIAD: combinar Nombre + Apellidos
+        // Lógica PIAD/MEP: extraer campos separados y construir nombre en formato MEP
         const n = String(row[mapping.name!] || "").trim();
         const a1 = String(row["Primer apellido"] || row["Primer Apellido"] || "").trim();
         const a2 = String(row["Segundo apellido"] || row["Segundo Apellido"] || "").trim();
-        fullName = `${n} ${a1} ${a2}`.trim();
+        
+        // Guardar campos separados
+        first_name = n || null;
+        last_name1 = a1 || null;
+        last_name2 = a2 || null;
+        
+        // Formato MEP: Apellido1 Apellido2 Nombres
+        fullName = [a1, a2, n].filter(Boolean).join(" ");
       } else {
+        // Sin modo PIAD: columna única de nombre, no intentar dividir
         fullName = String(row[mapping.name!] || "").trim();
       }
 
       return {
         name: fullName,
+        first_name,
+        last_name1,
+        last_name2,
         cedula: String(row[mapping.cedula!] || "").replace(/\s/g, "").trim() || null,
         parent1_phone: mapping.phone1 ? String(row[mapping.phone1] || "").trim() || null : null,
         parent2_phone: mapping.phone2 ? String(row[mapping.phone2] || "").trim() || null : null,

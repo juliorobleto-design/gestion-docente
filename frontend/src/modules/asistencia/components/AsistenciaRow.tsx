@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { TAttendanceStatus } from "../pages/AsistenciaPage";
 import { Estudiante } from "../hooks/useEstudiantesClase";
 import { calculateStudentRisk } from "./AsistenciaResumen";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 type AsistenciaRowProps = {
   student: Estudiante;
@@ -137,7 +138,7 @@ export default function AsistenciaRow({
     
     const cleanPhone = student.parent1_phone.replace(/[\s-]/g, "");
     
-    const message = `Estimado encargado(a) de ${student.name},\n\nSe le informa que el estudiante presenta un nivel de alerta en asistencia.\n\nPor favor dar seguimiento.\n\nAtentamente,\nDocente.`;
+    const message = `Estimado encargado(a) de ${buildStudentDisplayName(student)},\n\nSe le informa que el estudiante presenta un nivel de alerta en asistencia.\n\nPor favor dar seguimiento.\n\nAtentamente,\nDocente.`;
 
     const encodedMessage = encodeURIComponent(message);
     const url = `https://wa.me/506${cleanPhone}?text=${encodedMessage}`;
@@ -157,8 +158,8 @@ export default function AsistenciaRow({
       {/* Columna 1: Estudiante y Cédula */}
       <div className="flex flex-col min-w-0 pr-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-semibold text-gray-700 group-hover:text-indigo-900 group-hover:font-extrabold text-sm uppercase truncate transition-colors duration-150" title={student.name}>
-            {student.name}
+          <span className="font-semibold text-gray-700 group-hover:text-indigo-900 group-hover:font-extrabold text-sm uppercase truncate transition-colors duration-150" title={buildStudentDisplayName(student)}>
+            {buildStudentDisplayName(student)}
           </span>
           {student.apoyo_curricular === 'no_significativo' && (
             <div className="w-2 h-2 rounded-full bg-sky-400 flex-shrink-0 shadow-sm" title="Apoyos curriculares no significativos" />

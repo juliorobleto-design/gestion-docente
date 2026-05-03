@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import CotidianoGrid from "../components/CotidianoGrid";
 import { Plus, Trash2, Check, Sparkles, Save, FilePlus, Copy } from "lucide-react";
 import { showAuthError } from "../../../utils/authError";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 type Level = {
   id: string;
@@ -290,7 +291,7 @@ export default function CotidianoPage({
                   }}
                 >
                   <option value="">Seleccionar Estudiante...</option>
-                  {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {students.map(s => <option key={s.id} value={s.id}>{buildStudentDisplayName(s)}</option>)}
                 </select>
               </div>
 
@@ -339,7 +340,7 @@ export default function CotidianoPage({
           }}>
             <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#4f46e5", boxShadow: "0 0 8px rgba(79, 70, 229, 0.4)" }}></div>
             <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Evaluando a:</span>
-            <span style={{ fontSize: "18px", fontWeight: 900, color: "#4f46e5", letterSpacing: "-0.01em" }}>{selectedStudent.name}</span>
+            <span style={{ fontSize: "18px", fontWeight: 900, color: "#4f46e5", letterSpacing: "-0.01em" }}>{buildStudentDisplayName(selectedStudent)}</span>
             {selectedStudent.cedula && (
               <span style={{ fontSize: "14px", color: "#94a3b8", fontWeight: 700, background: "#fff", padding: "2px 10px", borderRadius: "8px", marginLeft: "8px", border: "1px solid #e2e8f0" }}>{selectedStudent.cedula}</span>
             )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Edit2, Save, Loader2, Copy } from "lucide-react";
 import { supabase } from "../../../supabaseClient";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 type CotidianoCol = {
   id: string;
@@ -539,7 +540,7 @@ export default function CotidianoGrid({
                   {/* Sticky Student Name */}
                   <td style={{ position: "sticky", left: 0, zIndex: 10, background: "inherit", borderBottom: "1px solid #e2e8f0", borderRight: "2px solid #e2e8f0", padding: "16px", backgroundColor: "white" }} className="group-hover:bg-indigo-50">
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>{student.name}</span>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>{buildStudentDisplayName(student)}</span>
                       {student.cedula && <span style={{ fontSize: "12px", color: "#64748b" }}>{student.cedula}</span>}
                     </div>
                   </td>

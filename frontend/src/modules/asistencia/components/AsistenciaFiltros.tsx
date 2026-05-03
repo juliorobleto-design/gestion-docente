@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ScheduleItem } from "../hooks/useHorarioDia";
 import { getTodayLocalDate } from "../pages/AsistenciaPage";
 
@@ -14,7 +14,29 @@ type AsistenciaFiltrosProps = {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   disabled?: boolean;
+  datesWithAttendance?: Set<string>;
 };
+
+/** Genera un array de 7 fechas (lunes a domingo) de la semana que contiene `dateStr` */
+function getWeekDays(dateStr: string): string[] {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const day = date.getDay(); // 0=dom, 1=lun...
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - ((day + 6) % 7)); // retrocede al lunes
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    days.push(`${yyyy}-${mm}-${dd}`);
+  }
+  return days;
+}
+
+const DAY_INITIALS = ["L", "K", "M", "J", "V", "S", "D"];
 
 export default function AsistenciaFiltros({
   schedules,
@@ -22,7 +44,8 @@ export default function AsistenciaFiltros({
   onSelectSchedule,
   selectedDate,
   onSelectDate,
-  disabled
+  disabled,
+  datesWithAttendance = new Set()
 }: AsistenciaFiltrosProps) {
   
   const [currentMinutes, setCurrentMinutes] = useState(() => {
@@ -42,6 +65,8 @@ export default function AsistenciaFiltros({
   const isPastDate = selectedDate < todayStr;
   const isFutureDate = selectedDate > todayStr;
 
+  const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+
   function getCardState(s: ScheduleItem) {
     if (isPastDate) return "past";
     if (isFutureDate) return "future";
@@ -52,6 +77,17 @@ export default function AsistenciaFiltros({
     if (currentMinutes < startMins) return "future";
     if (currentMinutes > endMins) return "past";
     return "current";
+  }
+
+  /** Navegar semana anterior/siguiente */
+  function shiftWeek(direction: -1 | 1) {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    date.setDate(date.getDate() + (direction * 7));
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    onSelectDate(`${yyyy}-${mm}-${dd}`);
   }
 
   return (
@@ -79,6 +115,75 @@ export default function AsistenciaFiltros({
           </div>
         </div>
       </div>
+
+      {/* MINI-SEMANA con marcas de asistencia */}
+      {!disabled && (
+        <div className="flex items-center gap-1 mb-3">
+          <button 
+            onClick={() => shiftWeek(-1)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer flex-shrink-0"
+            title="Semana anterior"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <div className="flex gap-1 flex-1 justify-center">
+            {weekDays.map((dayStr, i) => {
+              const isSelected = dayStr === selectedDate;
+              const isToday = dayStr === todayStr;
+              const hasAttendance = datesWithAttendance.has(dayStr);
+              const dayNum = dayStr.split('-')[2];
+              // Fin de semana (sábado=5, domingo=6)
+              const isWeekend = i >= 5;
+
+              return (
+                <button
+                  key={dayStr}
+                  onClick={() => onSelectDate(dayStr)}
+                  className={`
+                    relative flex flex-col items-center justify-center rounded-lg px-2 py-1.5 min-w-[38px] transition-all duration-150 cursor-pointer
+                    ${isSelected 
+                      ? 'bg-indigo-600 text-white shadow-md scale-105 ring-2 ring-indigo-300' 
+                      : isToday 
+                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100' 
+                        : isWeekend 
+                          ? 'bg-gray-50 text-gray-400 hover:bg-gray-100' 
+                          : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-100'
+                    }
+                  `}
+                  title={dayStr}
+                >
+                  <span className={`text-[9px] font-bold uppercase leading-none mb-0.5 ${isSelected ? 'text-indigo-200' : isToday ? 'text-indigo-400' : 'text-gray-400'}`}>
+                    {DAY_INITIALS[i]}
+                  </span>
+                  <span className={`text-[13px] font-extrabold leading-none ${isSelected ? '' : ''}`}>
+                    {dayNum}
+                  </span>
+                  {/* Indicador de asistencia registrada */}
+                  {hasAttendance && (
+                    <div className={`absolute -bottom-0.5 w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-300' : 'bg-emerald-500'} shadow-sm`}></div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button 
+            onClick={() => shiftWeek(1)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer flex-shrink-0"
+            title="Semana siguiente"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+          </button>
+          {/* Botón "Hoy" rápido */}
+          {selectedDate !== todayStr && (
+            <button
+              onClick={() => onSelectDate(todayStr)}
+              className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-md border border-indigo-200 transition-colors cursor-pointer ml-1 flex-shrink-0"
+            >
+              Hoy
+            </button>
+          )}
+        </div>
+      )}
       
       <div className="flex items-center gap-2 overflow-x-auto pt-1.5 pb-2 px-1 -mx-1 custom-scrollbar">
         {schedules.length === 0 ? (

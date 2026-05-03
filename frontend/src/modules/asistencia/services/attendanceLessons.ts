@@ -1,4 +1,5 @@
 import { supabase } from "../../../supabaseClient";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 export async function loadAttendanceByDate(groupId: number, date: string, period: string, ownerId: string) {
   const { data: students, error: studentsError } = await supabase
@@ -111,7 +112,7 @@ export async function loadHistoricalAccumulatedRisk(groupId: number, currentSele
 export async function loadAnnualAttendanceSummary(groupId: number, ownerId: string) {
   const { data: students, error: studentsError } = await supabase
     .from("students")
-    .select("id, name")
+    .select("id, name, first_name, last_name1, last_name2")
     .eq("group_id", groupId)
     .eq("owner_id", ownerId);
 
@@ -157,7 +158,7 @@ export async function loadAnnualAttendanceSummary(groupId: number, ownerId: stri
 
   return students.map((s: any) => ({
     id: s.id,
-    name: s.name,
+    name: buildStudentDisplayName(s),
     ...summary[s.id]
   }));
 }

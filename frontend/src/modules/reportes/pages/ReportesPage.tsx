@@ -17,10 +17,14 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { buildStudentDisplayName, compareStudentsMEP } from "../../../utils/studentName";
 
 interface Student {
   id: number;
   name: string;
+  first_name?: string | null;
+  last_name1?: string | null;
+  last_name2?: string | null;
   group_id: number;
   cedula?: string;
 }
@@ -67,7 +71,7 @@ export default function ReportesPage({
   // Derived
   const filteredStudents = allStudents
     .filter(s => s.group_id === Number(selectedGroup))
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
+    .sort(compareStudentsMEP);
   const selectedSectionsCount = Object.values(sections).filter(Boolean).length;
   const currentGroupName = groups.find(g => g.id === Number(selectedGroup))?.name || "Grupo";
 
@@ -127,7 +131,7 @@ export default function ReportesPage({
 
       const reportTitle = reportType === "grupal" 
         ? `REPORTE ACADÉMICO GRUPAL - ${currentGroupName}`
-        : `REPORTE ACADÉMICO INDIVIDUAL - ${allStudents.find(s => s.id === Number(selectedStudent))?.name || "Estudiante"}`;
+        : `REPORTE ACADÉMICO INDIVIDUAL - ${buildStudentDisplayName(allStudents.find(s => s.id === Number(selectedStudent)) || { name: "Estudiante" })}`;
       
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42); // slate-900
@@ -156,8 +160,8 @@ export default function ReportesPage({
           doc.text("Sin datos de asistencia registrados en este rango.", margin, currentY + 5);
           currentY += 15;
         } else {
-          const attendanceMap: Record<number, { present: number, late: number, total: number }> = {};
-          studentIds.forEach(id => attendanceMap[id] = { present: 0, late: 0, total: 0 });
+          const attendanceMap: Record<number, { present: number, late: number, absent: number, justified: number, total: number }> = {};
+          studentIds.forEach(id => attendanceMap[id] = { present: 0, late: 0, absent: 0, justified: 0, total: 0 });
           
           attendance.forEach(a => {
             if (attendanceMap[a.student_id]) {
@@ -165,6 +169,8 @@ export default function ReportesPage({
               const st = (a.status || "").toLowerCase();
               if (st === "presente" || st === "p") attendanceMap[a.student_id].present++;
               else if (st === "tardía" || st === "t") attendanceMap[a.student_id].late++;
+              else if (st === "ausente" || st === "a") attendanceMap[a.student_id].absent++;
+              else if (st === "justificada" || st === "j") attendanceMap[a.student_id].justified++;
             }
           });
 
@@ -173,15 +179,15 @@ export default function ReportesPage({
             const stats = attendanceMap[id];
             const presenceVal = stats.present + (stats.late * 0.5);
             const pct = stats.total > 0 ? ((presenceVal / stats.total) * 100).toFixed(1) : "0";
-            return [s?.name || "—", stats.present, stats.late, stats.total, `${pct}%`];
+            return [s ? buildStudentDisplayName(s) : "—", stats.present, stats.late, stats.absent, stats.justified, stats.total, `${pct}%`];
           });
 
           autoTable(doc, {
             startY: currentY,
-            head: [["Estudiante", "Presente", "Tardía", "Total Lecc.", "% Asistencia"]],
+            head: [["Estudiante", "Presente (P)", "Tardía (T)", "Ausente (A)", "Justificada (J)", "Total Lecc.", "% Asistencia"]],
             body: attendanceRows,
             theme: "striped",
-            headStyles: { fillColor: [79, 70, 229], fontSize: 9 },
+            headStyles: { fillColor: [79, 70, 229], fontSize: 8 },
             styles: { fontSize: 8 },
             margin: { left: margin, right: margin }
           });
@@ -242,7 +248,7 @@ export default function ReportesPage({
               ? ((studentRecord.score / studentRecord.total_points) * 100).toFixed(1)
               : "0";
 
-            return [s?.name || "—", ...colValues, `${pct}%`];
+            return [s ? buildStudentDisplayName(s) : "—", ...colValues, `${pct}%`];
           });
 
           autoTable(doc, {
@@ -301,7 +307,7 @@ export default function ReportesPage({
               totalFinal += (score * r.percentage) / 100;
               return score > 0 ? score.toString() : "0";
             });
-            return [s?.name || "—", ...rubricScores, totalFinal.toFixed(1)];
+            return [s ? buildStudentDisplayName(s) : "—", ...rubricScores, totalFinal.toFixed(1)];
           });
 
           autoTable(doc, {
@@ -340,7 +346,7 @@ export default function ReportesPage({
         } else {
           const recordRows = records.map(r => [
             new Date(r.date + 'T12:00:00').toLocaleDateString(),
-            reportType === "grupal" ? (allStudents.find(st => st.id === r.student_id)?.name || "—") : r.type,
+            reportType === "grupal" ? buildStudentDisplayName(allStudents.find(st => st.id === r.student_id) || { name: "—" }) : r.type,
             r.type,
             r.description
           ]);
@@ -487,7 +493,7 @@ export default function ReportesPage({
                     disabled={!selectedGroup}
                   >
                     <option value="">Selecciona un estudiante</option>
-                    {filteredStudents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {filteredStudents.map(s => <option key={s.id} value={s.id}>{buildStudentDisplayName(s)}</option>)}
                   </select>
                 </div>
               )}

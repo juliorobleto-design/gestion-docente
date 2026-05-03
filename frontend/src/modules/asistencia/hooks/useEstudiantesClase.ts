@@ -4,6 +4,9 @@ import { supabase } from "../../../supabaseClient";
 export type Estudiante = {
   id: string; // Lo tipamos como string porque en tu App.tsx se valida así
   name: string;
+  first_name?: string | null;
+  last_name1?: string | null;
+  last_name2?: string | null;
   cedula?: string;
   apoyo_curricular?: "no_significativo" | "significativo" | null;
   parent1_phone?: string;
@@ -29,7 +32,7 @@ export function useEstudiantesClase(groupId: number | null) {
         // En tu db actual, los estudiantes solo tienen group_id y no user_id (lo vimos en tu código)
         const { data, error: sbError } = await supabase
           .from("students")
-          .select("id, name, cedula, apoyo_curricular, parent1_phone")
+          .select("id, name, first_name, last_name1, last_name2, cedula, apoyo_curricular, parent1_phone")
           .eq("group_id", groupId)
           .order("name", { ascending: true }); // Orden alfabético obligatorio en listas escolares
 

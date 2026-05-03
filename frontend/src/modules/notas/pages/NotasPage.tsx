@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { showAuthError } from "../../../utils/authError";
 import { AlertTriangle, BarChart3, Award, X, RotateCcw, Calculator, Save, Check, Loader2 } from "lucide-react";
 import { supabase } from "../../../supabaseClient";
+import { buildStudentDisplayName } from "../../../utils/studentName";
 
 // ═══════════════════════════════════════════════════════════
 //  TYPES
@@ -16,6 +17,9 @@ type EvaluationRubric = {
 type Student = {
   id: number;
   name: string;
+  first_name?: string | null;
+  last_name1?: string | null;
+  last_name2?: string | null;
   cedula?: string;
   group_id: number;
 };
@@ -903,7 +907,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                             {index + 1}
                           </span>
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {student.name}
+                            {buildStudentDisplayName(student)}
                           </span>
                         </div>
                       </td>

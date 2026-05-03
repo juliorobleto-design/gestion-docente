@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { getDocument, GlobalWorkerOptions, version } from "pdfjs-dist";
 import Auth from "./Auth";
 import { parseStudentsFromExcel, ImportedStudent } from "./utils/excelParser";
+import { buildStudentDisplayName, buildLegacyStudentName, compareStudentsMEP } from "./utils/studentName";
 import ConfiguracionPage from "./modules/configuracion/pages/ConfiguracionPage";
 import AsistenciaPage from "./modules/asistencia/pages/AsistenciaPage";
 import CotidianoPage from "./modules/cotidiano/pages/CotidianoPage";
@@ -91,7 +92,9 @@ export default function App() {
   const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [pdfPreviewStudents, setPdfPreviewStudents] = useState<any[]>([])
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null)
-  const [newStudentName, setNewStudentName] = useState("");
+  const [newStudentLastName1, setNewStudentLastName1] = useState("");
+  const [newStudentLastName2, setNewStudentLastName2] = useState("");
+  const [newStudentFirstName, setNewStudentFirstName] = useState("");
   const [newStudentCedula, setNewStudentCedula] = useState("")
   const [newStudentGender, setNewStudentGender] = useState("")
   const [newStudentEmail, setNewStudentEmail] = useState("")
@@ -118,7 +121,11 @@ export default function App() {
     const [session, setSession] = useState<any>(null)
     const [isAuthReady, setIsAuthReady] = useState(false)
     const [authError, setAuthError] = useState<string | null>(null)
-    const [academicPeriod, setAcademicPeriod] = useState<'semester1' | 'semester2' | 'annual'>('semester1')
+    const [academicPeriod, setAcademicPeriod] = useState<'semester1' | 'semester2' | 'annual'>(() => {
+      const saved = localStorage.getItem('gd_academic_period');
+      if (saved === 'semester1' || saved === 'semester2' || saved === 'annual') return saved;
+      return 'semester1';
+    })
     const [isGuiaConfigOpen, setIsGuiaConfigOpen] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState<any | null>(null);
     const [isDeletingStudent, setIsDeletingStudent] = useState(false);
@@ -306,7 +313,13 @@ function getScheduleCell(day: string, startTime: string) {
   const selectedGroupId = Number(newScheduleGroup)
   const [activeSection, setActiveSection] = useState<
   "attendance" | "students" | "schedule" | "report" | "planning" | "settings" | "cotidiano" | "notas" | "anecdotal"
->("attendance")
+>(() => {
+    const saved = localStorage.getItem('gd_active_module');
+    if (saved && ["attendance","students","schedule","report","planning","settings","cotidiano","notas","anecdotal"].includes(saved)) {
+      return saved as any;
+    }
+    return "attendance";
+  })
 
   const [appSettings, setAppSettings] = useState<any>(() => {
     const saved = localStorage.getItem("gestion_docente_settings");
@@ -487,7 +500,14 @@ async function loadGroups() {
 
   setGroups(sortGroupsAsc(mapped))
 
-  if (mapped.length > 0) {
+  // Ajuste 3: Restaurar grupo guardado o usar el primero
+  const savedGroupId = localStorage.getItem('gd_active_group_id');
+  const savedId = savedGroupId ? Number(savedGroupId) : null;
+  const validSavedGroup = savedId && mapped.some(g => g.id === savedId);
+
+  if (validSavedGroup) {
+    setSelectedGroupId(savedId);
+  } else if (mapped.length > 0) {
     setSelectedGroupId(mapped[0].id)
   } else {
     setSelectedGroupId(null)
@@ -506,7 +526,8 @@ async function loadStudents(groupId: number) {
     console.error("Error cargando estudiantes:", error);
     return;
   }
-  setStudents(data || []);
+  // Ordenamiento MEP en frontend para manejar registros antiguos con campos NULL
+  setStudents((data || []).sort(compareStudentsMEP));
 }
 
 async function loadAllStudents() {
@@ -534,6 +555,21 @@ useEffect(() => {
     setStudents([])
   }
 }, [selectedGroup])
+
+// Ajuste 3: Persistir contexto de trabajo en localStorage
+useEffect(() => {
+  if (selectedGroup !== null) {
+    localStorage.setItem('gd_active_group_id', String(selectedGroup));
+  }
+}, [selectedGroup]);
+
+useEffect(() => {
+  localStorage.setItem('gd_active_module', activeSection);
+}, [activeSection]);
+
+useEffect(() => {
+  localStorage.setItem('gd_academic_period', academicPeriod);
+}, [academicPeriod]);
 
 
 useEffect(() => {
@@ -865,13 +901,23 @@ async function handleAddStudent() {
     alert("Selecciona un grupo antes de agregar un estudiante.");
     return;
   }
-  if (!newStudentName.trim()) {
-    alert("Escribe el nombre del estudiante.");
+  if (!newStudentLastName1.trim()) {
+    alert("Escribe al menos el primer apellido del estudiante.");
     return;
   }
 
+  // Construir nombre legado en formato MEP: Apellido1 Apellido2 Nombres
+  const mepFields = {
+    first_name: newStudentFirstName.trim() || null,
+    last_name1: newStudentLastName1.trim() || null,
+    last_name2: newStudentLastName2.trim() || null,
+  };
+
   const studentData = {
-    name: newStudentName.trim(),
+    name: buildLegacyStudentName(mepFields),
+    first_name: mepFields.first_name,
+    last_name1: mepFields.last_name1,
+    last_name2: mepFields.last_name2,
     cedula: newStudentCedula.trim() || null,
     gender: newStudentGender || null,
     mep_email: newStudentEmail.trim() || null,
@@ -910,7 +956,9 @@ async function handleAddStudent() {
 
   setEditingStudentId(null);
   setNewStudentCedula("");
-  setNewStudentName("");
+  setNewStudentLastName1("");
+  setNewStudentLastName2("");
+  setNewStudentFirstName("");
   setNewStudentGender("");
   setNewStudentEmail("");
   setNewStudentApoyo("");
@@ -920,7 +968,9 @@ async function handleAddStudent() {
 
 function startEditingStudent(student: any) {
   setEditingStudentId(student.id);
-  setNewStudentName(student.name || "");
+  setNewStudentLastName1(student.last_name1 || "");
+  setNewStudentLastName2(student.last_name2 || "");
+  setNewStudentFirstName(student.first_name || "");
   setNewStudentCedula(student.cedula || "");
   setNewStudentGender(student.gender || "");
   setNewStudentEmail(student.mep_email || "");
@@ -933,7 +983,9 @@ function startEditingStudent(student: any) {
 function cancelEditStudent() {
   setEditingStudentId(null);
   setNewStudentCedula("");
-  setNewStudentName("");
+  setNewStudentLastName1("");
+  setNewStudentLastName2("");
+  setNewStudentFirstName("");
   setNewStudentGender("");
   setNewStudentEmail("");
   setNewStudentApoyo("");
@@ -1173,6 +1225,8 @@ async function handleImportPdf(file: File) {
             
             // Buscamos palabras en mayúscula sospechosas de ser nombres
             const nameMatch = restLine.match(/[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,})+/i);
+            // Formato MEP: el nombre extraído del PDF se guarda tal cual en 'name'
+            // No intentamos dividir automáticamente porque el PDF no tiene estructura confiable
             const name = nameMatch ? nameMatch[0].trim().toUpperCase() : "ESTUDIANTE ENCONTRADO";
             
             // Email (deducir si no hay uno explícito)
@@ -2266,7 +2320,7 @@ async function handleImportStudents(file: File) {
                   paddingBottom: "12px",
                 }}>
                   <div style={{ fontWeight: 800, fontSize: "16px", color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.2px" }}>
-                    {student.name}
+                    {buildStudentDisplayName(student)}
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button 
@@ -2350,6 +2404,15 @@ async function handleImportStudents(file: File) {
           <h2>{editingStudentId ? "Editar Estudiante" : "Registrar Estudiante"}</h2>
         </div>
 
+        {/* Indicador visual del grupo activo */}
+        {selectedGroupName && (
+          <div style={{ padding: "10px 20px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#4f46e5", flexShrink: 0 }}></div>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>Agregando en:</span>
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "#4f46e5" }}>{selectedGroupName}</span>
+          </div>
+        )}
+
         <div style={{ padding: "20px", display: "grid", gap: "16px" }}>
           <div style={{ display: "grid", gap: "6px" }}>
             <label style={{ fontSize: "11px", fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Cédula</label>
@@ -2372,12 +2435,32 @@ async function handleImportStudents(file: File) {
           </div>
 
           <div style={{ display: "grid", gap: "6px" }}>
-            <label style={{ fontSize: "11px", fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre completo</label>
+            <label style={{ fontSize: "11px", fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Primer Apellido *</label>
             <input
               type="text"
-              placeholder="Nombre del estudiante"
-              value={newStudentName}
-              onChange={(e) => setNewStudentName(e.target.value)}
+              placeholder="Ej: Pérez"
+              value={newStudentLastName1}
+              onChange={(e) => setNewStudentLastName1(e.target.value)}
+              className="date-input"
+            />
+          </div>
+          <div style={{ display: "grid", gap: "6px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Segundo Apellido</label>
+            <input
+              type="text"
+              placeholder="Ej: Mora"
+              value={newStudentLastName2}
+              onChange={(e) => setNewStudentLastName2(e.target.value)}
+              className="date-input"
+            />
+          </div>
+          <div style={{ display: "grid", gap: "6px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 800, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombres</label>
+            <input
+              type="text"
+              placeholder="Ej: Juan Carlos"
+              value={newStudentFirstName}
+              onChange={(e) => setNewStudentFirstName(e.target.value)}
               className="date-input"
             />
           </div>
