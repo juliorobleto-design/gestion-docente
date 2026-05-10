@@ -56,7 +56,7 @@ function isAutoSourcRubric(name: string): boolean {
 // Mapeo de nombres de rúbricas dinámicas a columnas fijas en la tabla "grades"
 function rubricToColumn(name: string): string | null {
   const n = name.toUpperCase().trim();
-  if (n.includes("TAREA")) return "projects";
+  if (n.includes("TAREA") || n.includes("PROYECTO")) return "projects";
   if (n.includes("PRUEBA 2") || n === "PRUEBA2") return "test2";
   if (n.includes("PRUEBA 1") || n === "PRUEBA1" || n.includes("PRUEBA")) return "test1";
   if (n.includes("PORTAFOLIO") || n.includes("PORTFOLIO")) return "portfolio";

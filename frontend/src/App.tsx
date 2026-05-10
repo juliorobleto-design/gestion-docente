@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { supabase } from "./supabaseClient"
-import {  FileBarChart, Clock,  Users, FileText, Settings, CalendarCheck, NotebookPen, StickyNote, ScrollText, Bot, Ellipsis, Loader2, CheckCircle2, LogOut, Trash2, AlertTriangle } from "lucide-react";
+import {  FileBarChart, Clock,  Users, FileText, Settings, CalendarCheck, NotebookPen, StickyNote, ScrollText, Bot, Ellipsis, Loader2, CheckCircle2, LogOut, Trash2, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import * as XLSX from "xlsx";
 import { getDocument, GlobalWorkerOptions, version } from "pdfjs-dist";
 import Auth from "./Auth";
@@ -129,6 +129,10 @@ export default function App() {
     const [isGuiaConfigOpen, setIsGuiaConfigOpen] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState<any | null>(null);
     const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+    const [studentToTransfer, setStudentToTransfer] = useState<any | null>(null);
+    const [transferTargetGroup, setTransferTargetGroup] = useState<number | "">("")
+    const [transferReason, setTransferReason] = useState("");
+    const [isTransferring, setIsTransferring] = useState(false);
     const [scheduleConflict, setScheduleConflict] = useState<{ groupName: string, day: string, startTime: string, endTime: string } | null>(null);
 
     const BLOCKED_DOMAINS = ["mep.go.cr", "go.cr"];
@@ -1300,6 +1304,43 @@ async function handleDeleteStudent() {
   }
 }
 
+async function handleTransferStudent() {
+  if (!studentToTransfer || !transferTargetGroup || !session?.user?.id) return;
+
+  setIsTransferring(true);
+  try {
+    const { data, error } = await supabase.rpc('transfer_student', {
+      p_student_id: studentToTransfer.id,
+      p_to_group_id: Number(transferTargetGroup),
+      p_reason: transferReason.trim() || null
+    });
+
+    if (error) throw error;
+
+    const result = data as any;
+    if (!result.success) {
+      showToast(result.error || "No se pudo trasladar el estudiante", "error", setToast);
+      return;
+    }
+
+    showToast(`Estudiante trasladado correctamente a ${result.to_group_name}`, "success", setToast);
+
+    // Refrescar listas
+    if (selectedGroup) await loadStudents(selectedGroup);
+    await loadAllStudents();
+
+    // Limpiar modal
+    setStudentToTransfer(null);
+    setTransferTargetGroup("");
+    setTransferReason("");
+  } catch (error: any) {
+    console.error("Error en traspaso:", error);
+    showToast("No se pudo trasladar el estudiante. Verifica e intenta nuevamente.", "error", setToast);
+  } finally {
+    setIsTransferring(false);
+  }
+}
+
 async function confirmPdfImport() {
   if (!session?.user?.id) {
     showAuthError();
@@ -2333,6 +2374,13 @@ async function handleImportStudents(file: File) {
                       </svg>
                     </button>
                     <button 
+                      title="Trasladar estudiante"
+                      onClick={() => setStudentToTransfer(student)}
+                      className="flex justify-center items-center w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors border border-transparent shadow-sm hover:border-amber-100 cursor-pointer"
+                    >
+                      <ArrowRightLeft size={15} />
+                    </button>
+                    <button 
                       title="Eliminar estudiante"
                       onClick={() => setStudentToDelete(student)}
                       className="flex justify-center items-center w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors border border-transparent shadow-sm hover:border-red-100 cursor-pointer"
@@ -3012,6 +3060,87 @@ async function handleImportStudents(file: File) {
                 >
                   {isDeletingStudent ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                   Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {studentToTransfer && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal-card animate-in fade-in zoom-in duration-200" style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fffbeb', color: '#f59e0b', display: 'grid', placeItems: 'center', marginBottom: '20px' }}>
+                <ArrowRightLeft size={28} />
+              </div>
+              <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', marginBottom: '6px' }}>Trasladar Estudiante</h3>
+              <p style={{ fontSize: '15px', fontWeight: 700, color: '#4f46e5', marginBottom: '16px' }}>
+                {buildStudentDisplayName(studentToTransfer)}
+              </p>
+
+              {/* Info Banner */}
+              <div style={{ width: '100%', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '14px', padding: '14px 18px', marginBottom: '20px', textAlign: 'left' }}>
+                <p style={{ fontSize: '13px', color: '#0369a1', lineHeight: 1.6, margin: 0, fontWeight: 500 }}>
+                  El historial de asistencia y cotidiano se conservará asociado al estudiante.<br />
+                  Las notas y registros que dependan del grupo conservarán su contexto original.<br />
+                  <strong>Esta acción no elimina datos.</strong>
+                </p>
+              </div>
+
+              {/* Grupo Actual */}
+              <div style={{ width: '100%', marginBottom: '16px', textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Grupo Actual</label>
+                <div style={{ padding: '10px 16px', background: '#f1f5f9', borderRadius: '10px', fontSize: '14px', fontWeight: 700, color: '#475569', border: '1px solid #e2e8f0' }}>
+                  {groups.find(g => g.id === studentToTransfer.group_id)?.name || 'Grupo desconocido'}
+                </div>
+              </div>
+
+              {/* Grupo Destino */}
+              <div style={{ width: '100%', marginBottom: '16px', textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Grupo Destino</label>
+                <select
+                  value={transferTargetGroup}
+                  onChange={(e) => setTransferTargetGroup(e.target.value === '' ? '' : Number(e.target.value))}
+                  style={{ width: '100%', padding: '10px 16px', borderRadius: '10px', border: '2px solid', borderColor: transferTargetGroup ? '#4f46e5' : '#e2e8f0', fontSize: '14px', fontWeight: 600, outline: 'none', cursor: 'pointer', background: '#fff', color: '#0f172a', transition: 'border-color 0.2s' }}
+                >
+                  <option value="">Seleccionar grupo destino...</option>
+                  {groups.filter(g => g.id !== studentToTransfer.group_id).map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Motivo (Opcional) */}
+              <div style={{ width: '100%', marginBottom: '24px', textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Motivo del traspaso (opcional)</label>
+                <input
+                  type="text"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="Ej: Cambio de sección, corrección de grupo..."
+                  style={{ width: '100%', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '13px', fontWeight: 500, outline: 'none', color: '#334155', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => e.target.style.borderColor = '#4f46e5'}
+                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                />
+              </div>
+
+              {/* Botones */}
+              <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+                <button
+                  onClick={() => { setStudentToTransfer(null); setTransferTargetGroup(''); setTransferReason(''); }}
+                  disabled={isTransferring}
+                  style={{ flex: 1, padding: '12px', borderRadius: '14px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleTransferStudent}
+                  disabled={isTransferring || !transferTargetGroup}
+                  style={{ flex: 1, padding: '12px', borderRadius: '14px', border: 'none', background: !transferTargetGroup ? '#94a3b8' : '#f59e0b', color: '#fff', fontSize: '14px', fontWeight: 700, cursor: !transferTargetGroup ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: transferTargetGroup ? '0 4px 12px rgba(245, 158, 11, 0.3)' : 'none', transition: 'all 0.2s' }}
+                >
+                  {isTransferring ? <Loader2 size={18} className="animate-spin" /> : <ArrowRightLeft size={18} />}
+                  {isTransferring ? 'Trasladando...' : 'Trasladar'}
                 </button>
               </div>
             </div>

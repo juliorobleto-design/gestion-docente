@@ -6,8 +6,20 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Desactivar el SW en desarrollo para evitar interferencia con descargas PDF
+      disabled: process.env.NODE_ENV === 'development',
+      selfDestroying: true, // Fuerza la auto-destrucción del SW existente
       registerType: 'autoUpdate',
       includeAssets: ['logo-gd.svg'],
+      workbox: {
+        navigateFallbackDenylist: [/^\/blob:/, /\.pdf$/],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*supabase\.co\/.*/i,
+            handler: 'NetworkOnly',
+          }
+        ],
+      },
       manifest: {
         name: 'Gestión Docente',
         short_name: 'Docente',

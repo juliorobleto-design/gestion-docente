@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../../supabaseClient";
 import { 
   FileBarChart, 
@@ -135,7 +135,14 @@ export default function ReportesPage({
       
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42); // slate-900
-      doc.text(reportTitle.toUpperCase(), pageWidth / 2, 60, { align: "center" });
+      doc.text(reportTitle.toUpperCase(), pageWidth / 2, 57, { align: "center" });
+      
+      // Subtítulo con grupo (solo en reporte individual, en grupal ya está en el título)
+      if (reportType === "individual") {
+        doc.setFontSize(11);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`GRUPO: ${currentGroupName}`, pageWidth / 2, 64, { align: "center" });
+      }
 
       let currentY = 70;
       const studentIds = reportType === "individual" ? [Number(selectedStudent)] : filteredStudents.map(s => s.id);
@@ -243,12 +250,12 @@ export default function ReportesPage({
               return typeof val === "number" ? `${val}%` : "—";
             });
 
-            // Promedio
-            const pct = studentRecord?.total_points && studentRecord.total_points > 0
-              ? ((studentRecord.score / studentRecord.total_points) * 100).toFixed(1)
+            // Total ponderado (score ya representa el valor ponderado al peso del rubro)
+            const totalStr = studentRecord?.score !== null && studentRecord?.score !== undefined
+              ? Number(studentRecord.score).toFixed(1)
               : "0";
 
-            return [s ? buildStudentDisplayName(s) : "—", ...colValues, `${pct}%`];
+            return [s ? buildStudentDisplayName(s) : "—", ...colValues, `${totalStr}%`];
           });
 
           autoTable(doc, {
@@ -275,39 +282,130 @@ export default function ReportesPage({
         doc.text("CUADRO DE CALIFICACIONES", margin, currentY);
         currentY += 6;
 
+        // Helpers de mapeo (mismo que NotasPage)
+        const rubricToCol = (name: string): string | null => {
+          const n = name.toUpperCase().trim();
+          if (n.includes("TAREA") || n.includes("PROYECTO")) return "projects";
+          if (n.includes("PRUEBA 2") || n === "PRUEBA2") return "test2";
+          if (n.includes("PRUEBA 1") || n === "PRUEBA1" || n.includes("PRUEBA")) return "test1";
+          if (n.includes("PORTAFOLIO") || n.includes("PORTFOLIO")) return "portfolio";
+          if (n.includes("DEMOSTRACI") || n.includes("DEMONSTR")) return "demonstration";
+          if (n.includes("SUMATIVO") || n.includes("INSTRUMENTO")) return "sumative_instrument";
+          return null;
+        };
+        const isAttendanceR = (name: string) => name.toUpperCase().trim().includes("ASISTENCIA");
+        const isCotidianoR = (name: string) => name.toUpperCase().trim().includes("COTIDIANO");
+        const isAutoSourced = (name: string) => isAttendanceR(name) || isCotidianoR(name);
+
         const activeRubrics = evaluationRubrics.filter(r => r.name && r.name.trim() !== "");
+        const periodToLoad = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+
+        // 1) Cargar notas manuales desde tabla grades
         const { data: gradesData } = await supabase
           .from("grades")
           .select("*")
           .in("student_id", studentIds)
-          .eq("group_id", selectedGroup)
-          .eq("period", academicPeriod === 'annual' ? 'semester1' : academicPeriod);
+          .eq("period", periodToLoad);
 
-        if (!gradesData || gradesData.length === 0) {
+        // 2) Cargar Asistencia automática desde attendance_lessons
+        const { data: attData } = await supabase
+          .from("attendance_lessons")
+          .select("student_id, status")
+          .in("student_id", studentIds)
+          .eq("period", periodToLoad);
+
+        const attPct: Record<number, number | null> = {};
+        studentIds.forEach(id => { attPct[id] = null; });
+        if (attData) {
+          const attCounts: Record<number, { total: number; present: number }> = {};
+          studentIds.forEach(id => { attCounts[id] = { total: 0, present: 0 }; });
+          attData.forEach(row => {
+            if (!attCounts[row.student_id]) attCounts[row.student_id] = { total: 0, present: 0 };
+            attCounts[row.student_id].total += 1;
+            const st = String(row.status).toUpperCase();
+            if (st === "P" || st === "PRESENTE") attCounts[row.student_id].present += 1;
+            else if (st === "T" || st.includes("TARD")) attCounts[row.student_id].present += 0.5;
+          });
+          studentIds.forEach(id => {
+            const a = attCounts[id];
+            attPct[id] = a && a.total > 0 ? Math.round((a.present / a.total) * 100 * 100) / 100 : null;
+          });
+        }
+
+        // 3) Cargar Cotidiano automático desde daily_work_scores
+        const { data: cwScores } = await supabase
+          .from("daily_work_scores")
+          .select("student_id, score, total_points")
+          .in("student_id", studentIds)
+          .eq("period", periodToLoad);
+
+        const cotPct: Record<number, number | null> = {};
+        studentIds.forEach(id => { cotPct[id] = null; });
+        if (cwScores) {
+          cwScores.forEach(d => {
+            if (d.total_points && d.total_points > 0) {
+              cotPct[d.student_id] = Math.round((d.score / d.total_points) * 100 * 100) / 100;
+            }
+          });
+        }
+
+        // Construir mapa completo de notas (auto + manual)
+        const gradesMap: Record<number, Record<string, number | null>> = {};
+        studentIds.forEach(id => {
+          gradesMap[id] = {};
+          activeRubrics.forEach(rubric => {
+            if (isAttendanceR(rubric.name)) {
+              gradesMap[id][rubric.id] = attPct[id] ?? null;
+            } else if (isCotidianoR(rubric.name)) {
+              gradesMap[id][rubric.id] = cotPct[id] ?? null;
+            }
+          });
+        });
+
+        // Notas manuales desde grades table
+        if (gradesData) {
+          gradesData.forEach(row => {
+            activeRubrics.forEach(rubric => {
+              if (!isAutoSourced(rubric.name)) {
+                const colName = rubricToCol(rubric.name);
+                if (colName && row[colName] !== null && row[colName] !== undefined) {
+                  if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
+                  gradesMap[row.student_id][rubric.id] = row[colName];
+                }
+              }
+            });
+          });
+        }
+
+        // Verificar si hay datos
+        const hasAnyData = studentIds.some(id => {
+          const scores = gradesMap[id] || {};
+          return Object.values(scores).some(v => v !== null && v !== undefined);
+        });
+
+        if (!hasAnyData) {
           doc.setFontSize(10);
           doc.setTextColor(148, 163, 184);
           doc.text("No se han registrado calificaciones para este período.", margin, currentY + 5);
           currentY += 15;
         } else {
-          const gradesMap: Record<number, Record<string, number>> = {};
-          gradesData.forEach(row => {
-            if (!gradesMap[row.student_id]) gradesMap[row.student_id] = {};
-            gradesMap[row.student_id][row.rubric_id] = row.score;
-          });
-
+          // Tabla con TODOS los rubros configurados
           const rubricHeaders = activeRubrics.map(r => `${r.name}\n(${r.percentage}%)`);
-          const tableHeaders = ["Estudiante", ...rubricHeaders, "Promedio"];
+          const tableHeaders = ["Estudiante", ...rubricHeaders, "Nota Final"];
 
           const gradesRows = studentIds.map(id => {
             const s = allStudents.find(st => st.id === id);
             const studentScores = gradesMap[id] || {};
-            let totalFinal = 0;
+            let notaFinal = 0;
             const rubricScores = activeRubrics.map(r => {
-              const score = studentScores[r.id] ?? 0;
-              totalFinal += (score * r.percentage) / 100;
-              return score > 0 ? score.toString() : "0";
+              const score = studentScores[r.id];
+              if (score !== null && score !== undefined) {
+                notaFinal += (score * r.percentage) / 100;
+                return score.toFixed(1);
+              }
+              return "—";
             });
-            return [s ? buildStudentDisplayName(s) : "—", ...rubricScores, totalFinal.toFixed(1)];
+            return [s ? buildStudentDisplayName(s) : "—", ...rubricScores, notaFinal.toFixed(1)];
           });
 
           autoTable(doc, {
@@ -319,7 +417,12 @@ export default function ReportesPage({
             styles: { fontSize: 7, cellPadding: 2 },
             margin: { left: margin, right: margin }
           });
-          currentY = (doc as any).lastAutoTable.finalY + 15;
+          currentY = (doc as any).lastAutoTable.finalY + 5;
+          // Nota al pie de la tabla de calificaciones
+          doc.setFontSize(7);
+          doc.setTextColor(148, 163, 184);
+          doc.text("— = sin calificación registrada", margin, currentY);
+          currentY += 12;
         }
       }
 
@@ -345,7 +448,7 @@ export default function ReportesPage({
           doc.text("Sin incidentes o registros en este rango.", margin, currentY + 5);
         } else {
           const recordRows = records.map(r => [
-            new Date(r.date + 'T12:00:00').toLocaleDateString(),
+            r.date ? new Date(r.date.includes('T') ? r.date : r.date + 'T12:00:00').toLocaleDateString('es-CR') : '—',
             reportType === "grupal" ? buildStudentDisplayName(allStudents.find(st => st.id === r.student_id) || { name: "—" }) : r.type,
             r.type,
             r.description
@@ -363,7 +466,19 @@ export default function ReportesPage({
         }
       }
 
-      doc.save(`Reporte_${currentGroupName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      // Descarga manual del PDF para evitar interferencia del Service Worker
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `Reporte_${currentGroupName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      downloadLink.style.display = 'none';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      setTimeout(() => {
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(pdfUrl);
+      }, 200);
     } catch (error) {
       console.error("PDF Final Error:", error);
       alert("Error crítico al generar reporte. Revisa la consola.");
