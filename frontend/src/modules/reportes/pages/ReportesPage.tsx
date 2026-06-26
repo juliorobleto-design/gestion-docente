@@ -13,11 +13,13 @@ import {
   Send, 
   Loader2,
   FileCheck2,
-  AlertCircle
+  AlertCircle,
+  FileSpreadsheet
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { buildStudentDisplayName, compareStudentsMEP } from "../../../utils/studentName";
+import { exportToSEACSV } from "../../../utils/seaExporter";
 
 interface Student {
   id: number;
@@ -82,6 +84,31 @@ export default function ReportesPage({
 
   const toggleSection = (key: keyof typeof sections) => {
     setSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const [exportingSEA, setExportingSEA] = useState(false);
+
+  const handleExportSEA = async () => {
+    if (!selectedGroup) {
+      alert("Por favor selecciona un grupo.");
+      return;
+    }
+    setExportingSEA(true);
+    try {
+      const res = await exportToSEACSV(
+        Number(selectedGroup),
+        currentGroupName,
+        academicPeriod,
+        allStudents
+      );
+      if (!res.success) {
+        alert(res.message);
+      }
+    } catch (err: any) {
+      alert("Error exportando a formato SEA: " + err.message);
+    } finally {
+      setExportingSEA(false);
+    }
   };
 
   const handleSendWhatsApp = () => {
@@ -682,6 +709,21 @@ export default function ReportesPage({
               >
                 <Send size={20} />
                 Enviar por WhatsApp
+              </button>
+
+              <button 
+                onClick={handleExportSEA}
+                disabled={exportingSEA || !selectedGroup}
+                style={{ 
+                  width: "100%", padding: "16px", borderRadius: "16px", background: "#6366f1", 
+                  color: "#fff", fontSize: "15px", fontWeight: 800, border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+                  boxShadow: "0 10px 20px rgba(99, 102, 241, 0.2)", transition: "all 0.2s"
+                }}
+                className="hover:bg-indigo-700 active:scale-95"
+              >
+                {exportingSEA ? <Loader2 className="animate-spin" /> : <FileSpreadsheet size={20} />}
+                {exportingSEA ? "Exportando..." : "Exportar Formato SEA (CSV)"}
               </button>
             </div>
           </div>
