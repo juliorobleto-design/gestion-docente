@@ -88,6 +88,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   const [viewMode, setViewMode] = useState<ViewMode>("points");
   const [showSimulator, setShowSimulator] = useState(false);
   const [simValues, setSimValues] = useState<Record<string, number | null>>({});
+  const [focusedCell, setFocusedCell] = useState<{ studentId: number; rubricId: string } | null>(null);
 
   // Manual grades: { [studentId]: { [rubricId]: number | null } }
   const [manualGrades, setManualGrades] = useState<Record<number, Record<string, number | null>>>({});
@@ -961,47 +962,85 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                                 </td>
                               );
                             }
+                            const isFocused = focusedCell?.studentId === student.id && focusedCell?.rubricId === rubric.id;
 
                             return (
                               <td key={rubric.id} style={{ padding: "8px 10px", textAlign: "center" }}>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  defaultValue={grade === null ? "" : grade}
-                                  key={`grade-${student.id}-${rubric.id}-${grade}`}
-                                  data-nrow={index}
-                                  data-ncol={rIndex}
-                                  onBlur={e => {
-                                    setGrade(student.id, rubric.id, e.target.value);
-                                    e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; e.target.style.boxShadow = "none";
-                                  }}
-                                  onKeyDown={e => {
-                                    const raw = (e.target as HTMLInputElement).value;
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      setGrade(student.id, rubric.id, raw);
-                                      // Mover foco a la celda de abajo
-                                      const nextRow = index + 1;
-                                      const nextInput = document.querySelector(
-                                        `input[data-nrow="${nextRow}"][data-ncol="${rIndex}"]`
-                                      ) as HTMLInputElement;
-                                      if (nextInput) nextInput.focus();
-                                    }
-                                  }}
-                                  placeholder="—"
-                                  title="Escribe % (ej: 85) o fracción (ej: 17/20)"
-                                  style={{
-                                    width: "72px", padding: "8px 6px", borderRadius: "10px",
-                                    border: "1px solid #e2e8f0", fontSize: "14px", fontWeight: 600,
-                                    textAlign: "center", color: "#0f172a", 
-                                    outline: "none",
-                                    background: "#f8fafc", 
-                                    transition: "all 0.2s",
-                                    cursor: "text",
-                                    opacity: 1
-                                  }}
-                                  onFocus={e => { e.target.style.borderColor = "#6366f1"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(99, 102, 241, 0.1)"; }}
-                                />
+                                <div style={{ position: "relative", width: "72px", height: "36px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  {!isFocused && (
+                                    <div style={{
+                                      position: "absolute",
+                                      top: 0, left: 0, right: 0, bottom: 0,
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      pointerEvents: "none",
+                                      zIndex: 1
+                                    }}>
+                                      {grade === null ? (
+                                        <span style={{ color: "#cbd5e1", fontSize: "14px", fontWeight: 500 }}>—</span>
+                                      ) : (
+                                        <div>
+                                          <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+                                            {formatted.main}
+                                          </span>
+                                          {formatted.sub && (
+                                            <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, marginTop: "1px" }}>
+                                              {formatted.sub}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    defaultValue={grade === null ? "" : grade}
+                                    key={`grade-${student.id}-${rubric.id}-${grade}`}
+                                    data-nrow={index}
+                                    data-ncol={rIndex}
+                                    placeholder="—"
+                                    title="Escribe % (ej: 85) o fracción (ej: 17/20)"
+                                    onFocus={e => {
+                                      setFocusedCell({ studentId: student.id, rubricId: rubric.id });
+                                      e.target.style.borderColor = "#6366f1"; e.target.style.background = "#fff"; e.target.style.boxShadow = "0 0 0 3px rgba(99, 102, 241, 0.1)";
+                                    }}
+                                    onBlur={e => {
+                                      setFocusedCell(null);
+                                      setGrade(student.id, rubric.id, e.target.value);
+                                      e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; e.target.style.boxShadow = "none";
+                                    }}
+                                    onKeyDown={e => {
+                                      const raw = (e.target as HTMLInputElement).value;
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        setGrade(student.id, rubric.id, raw);
+                                        // Mover foco a la celda de abajo
+                                        const nextRow = index + 1;
+                                        const nextInput = document.querySelector(
+                                          `input[data-nrow="${nextRow}"][data-ncol="${rIndex}"]`
+                                        ) as HTMLInputElement;
+                                        if (nextInput) nextInput.focus();
+                                      }
+                                    }}
+                                    style={{
+                                      width: "72px", height: "36px", padding: "8px 6px", borderRadius: "10px",
+                                      border: "1px solid #e2e8f0", fontSize: "14px", fontWeight: 600,
+                                      textAlign: "center", color: "#0f172a", 
+                                      outline: "none",
+                                      background: "#f8fafc", 
+                                      transition: "all 0.2s",
+                                      cursor: "text",
+                                      opacity: isFocused ? 1 : 0,
+                                      position: "absolute",
+                                      top: 0,
+                                      left: 0,
+                                      zIndex: 2
+                                    }}
+                                  />
+                                </div>
                               </td>
                             );
                           })}
