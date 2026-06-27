@@ -1734,16 +1734,16 @@ async function handleImportStudents(file: File) {
           className="topbar" 
           style={{ 
             background: academicPeriod === 'semester2' 
-              ? '#e6f4ea' 
+              ? '#d1fae5' 
               : academicPeriod === 'annual' 
-                ? '#f3e8ff' 
+                ? '#ede9fe' 
                 : '#e0f2fe',
             borderBottom: academicPeriod === 'semester2' 
-              ? '1px solid #c2e7cd' 
+              ? '2px solid #34d399' 
               : academicPeriod === 'annual' 
-                ? '1px solid #d8b4fe' 
-                : '1px solid #bae6fd',
-            transition: 'all 0.3s ease'
+                ? '2px solid #a78bfa' 
+                : '2px solid #7dd3fc',
+            transition: 'all 0.4s ease'
           }}
         >
           <div className="topbar-main">
