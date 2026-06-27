@@ -235,7 +235,6 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         console.error("[loadAnnualGrades] Error attData:", attErr);
         throw attErr;
       }
-      console.log("[loadAnnualGrades] attData loaded:", attData?.length);
 
       const attCounts: Record<string, Record<number, { total: number; present: number }>> = {
         semester1: {},
@@ -283,7 +282,6 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         console.error("[loadAnnualGrades] Error cwData:", cwErr);
         throw cwErr;
       }
-      console.log("[loadAnnualGrades] cwData loaded:", cwData?.length);
 
       const cotPctMap: Record<string, Record<number, number | null>> = {
         semester1: {},
@@ -313,7 +311,6 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         console.error("[loadAnnualGrades] Error gradesData:", gradesErr);
         throw gradesErr;
       }
-      console.log("[loadAnnualGrades] gradesData loaded:", gradesData?.length);
 
       const manualMap: Record<string, Record<number, Record<string, number | null>>> = {
         semester1: {},
