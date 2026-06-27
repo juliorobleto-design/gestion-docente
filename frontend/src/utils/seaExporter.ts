@@ -68,11 +68,11 @@ export async function exportToSEACSV(
 
     if (cwError) throw cwError;
 
-    const cotPct: Record<number, number> = {};
-    studentIds.forEach(id => { cotPct[id] = 0; });
+    const cotPoints: Record<number, number> = {};
+    studentIds.forEach(id => { cotPoints[id] = 0; });
     (cwScores || []).forEach(d => {
-      if (d.total_points && d.total_points > 0) {
-        cotPct[d.student_id] = Math.round((d.score / d.total_points) * 100);
+      if (d.score != null) {
+        cotPoints[d.student_id] = Math.round(d.score * 10) / 10;
       }
     });
 
@@ -117,7 +117,7 @@ export async function exportToSEACSV(
       const cleanCedula = rawCedula.replace(/[-\s]/g, "");
 
       const displayName = buildStudentDisplayName(student).toUpperCase();
-      const cotidiano = cotPct[student.id] || 0;
+      const cotidiano = cotPoints[student.id] || 0;
       const tareas = gradesMap[student.id]?.projects || 0;
       const prueba = gradesMap[student.id]?.test || 0;
       const asistencia = attPct[student.id] || 0;
