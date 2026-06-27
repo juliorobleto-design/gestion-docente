@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useHorarioDia } from "../hooks/useHorarioDia";
 import { useEstudiantesClase } from "../hooks/useEstudiantesClase";
-import { useAttendanceDates } from "../hooks/useAttendanceDates";
 import AsistenciaFiltros from "../components/AsistenciaFiltros";
 import AsistenciaRow from "../components/AsistenciaRow";
 import AsistenciaResumen from "../components/AsistenciaResumen";
@@ -65,15 +64,6 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
 
   // 2. NUEVO HOOK: Maneja el estado asíncrono del botón Guardar sin ensuciar la vista
   const { guardar, isSaving, saveError, saveSuccess } = useGuardarAsistencia();
-
-  // 3. Hook para marcar días con asistencia en el calendario
-  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
-  const { datesWithAttendance } = useAttendanceDates(
-    selectedGroupId,
-    academicPeriod,
-    session?.user?.id,
-    attendanceRefreshKey
-  );
 
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
 
@@ -203,8 +193,6 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
         ownerId: session.user.id,
         period: academicPeriod
       });
-      // Actualizar marcas del calendario tras guardar
-      setAttendanceRefreshKey(k => k + 1);
     } catch (error) {
       console.error("Error guardando asistencia:", error);
     }
@@ -256,7 +244,6 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
         disabled={academicPeriod === 'annual'}
-        datesWithAttendance={datesWithAttendance}
       />
 
       <div className="bg-white p-3 sm:p-6 mt-1 rounded-2xl shadow-sm border border-gray-100">
