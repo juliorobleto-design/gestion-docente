@@ -13,6 +13,7 @@ type AsistenciaRowProps = {
   onChange: (studentId: number, lessonIndex: number, status: TAttendanceStatus) => void;
   onMetadataChange: (studentId: number, field: "location" | "observation", value: string, explicitLessonIndex: number) => void;
   activeLessonIndex: number | null;
+  actualLessonsCount: number;
 };
 
 // Configuración de colores SIN tocar, exactamente como funcionaba
@@ -31,7 +32,8 @@ export default function AsistenciaRow({
   pastPoints = 0,
   onChange, 
   onMetadataChange,
-  activeLessonIndex 
+  activeLessonIndex,
+  actualLessonsCount
 }: AsistenciaRowProps) {
   
   const { points, percentage, colorClass } = calculateStudentRisk(values, pastPoints);
@@ -200,6 +202,23 @@ export default function AsistenciaRow({
 
       {/* Columnas 3 a 8: Iterador fijo a 6 casillas para proteger el ancho de la tabla */}
       {Array.from({ length: 6 }).map((_, slotIndex) => {
+        const isExcluded = slotIndex >= actualLessonsCount;
+
+        if (isExcluded) {
+          return (
+            <div key={slotIndex} className="flex justify-center items-center">
+              <button
+                type="button"
+                disabled
+                className="w-9 h-9 flex items-center justify-center font-bold text-xs rounded-xl border border-gray-100 bg-gray-50/50 text-gray-300 cursor-not-allowed shadow-none"
+                title={`Lección ${slotIndex + 1}: No impartida hoy`}
+              >
+                —
+              </button>
+            </div>
+          );
+        }
+
         const val = values[slotIndex];
         const currentConfig = val ? STATUS_CONFIG[val] || STATUS_CONFIG["P"] : null;
         

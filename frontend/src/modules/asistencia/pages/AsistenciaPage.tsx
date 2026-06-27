@@ -33,6 +33,7 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
   const { schedulesDelDia, loading: loadingHorario, error: errorHorario } = useHorarioDia(selectedDate, session?.user?.id);
   
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(null);
+  const [actualLessonsCount, setActualLessonsCount] = useState<number>(1);
 
   // Forzamos explícitamente el reseteo del grupo y las lecciones al cambiar de fecha o periodo
   useEffect(() => {
@@ -118,19 +119,24 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
         const memoryObservations: Record<number, string[]> = {};
 
         estudiantes.forEach((est) => {
-          memoryAttendance[Number(est.id)] = Array(scheduleLessonsCount).fill("P");
-          memoryLocations[Number(est.id)] = Array(scheduleLessonsCount).fill("");
-          memoryObservations[Number(est.id)] = Array(scheduleLessonsCount).fill("");
+          memoryAttendance[Number(est.id)] = Array(6).fill("P");
+          memoryLocations[Number(est.id)] = Array(6).fill("");
+          memoryObservations[Number(est.id)] = Array(6).fill("");
         });
 
         const periodToLoad = academicPeriod;
         const savedRecords = await loadAttendanceByDate(selectedGroupId, selectedDate, periodToLoad, session.user.id);
 
+        let maxSavedLesson = 0;
         savedRecords.forEach((record) => {
           const sId = record.student_id;
           const lessonIndex = record.lesson_number - 1; 
           
-          if (memoryAttendance[sId] && lessonIndex >= 0 && lessonIndex < scheduleLessonsCount) {
+          if (record.lesson_number > maxSavedLesson) {
+            maxSavedLesson = record.lesson_number;
+          }
+
+          if (memoryAttendance[sId] && lessonIndex >= 0 && lessonIndex < 6) {
             let mappedStatus: TAttendanceStatus = "P";
             if (record.status === "tardía") mappedStatus = "T";
             else if (record.status === "ausente") mappedStatus = "A";
@@ -145,6 +151,12 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
         setAttendance(memoryAttendance);
         setLocations(memoryLocations);
         setObservations(memoryObservations);
+
+        if (maxSavedLesson > 0) {
+          setActualLessonsCount(maxSavedLesson);
+        } else {
+          setActualLessonsCount(scheduleLessonsCount);
+        }
 
         const histRisk = await loadHistoricalAccumulatedRisk(selectedGroupId, selectedDate, periodToLoad, session.user.id);
         setAccumulatedRiskPoints(histRisk);
@@ -176,7 +188,7 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
       return;
     }
     setAttendance((prev) => {
-      const currentArray = prev[studentId] ? [...prev[studentId]] : Array(scheduleLessonsCount).fill("P");
+      const currentArray = prev[studentId] ? [...prev[studentId]] : Array(6).fill("P");
       currentArray[lessonIndex] = status;
       return { ...prev, [studentId]: currentArray };
     });
@@ -206,20 +218,20 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
     }
     if (field === "location") {
       setLocations(prev => {
-         const currentArray = prev[studentId] ? [...prev[studentId]] : Array(scheduleLessonsCount).fill("");
+         const currentArray = prev[studentId] ? [...prev[studentId]] : Array(6).fill("");
          currentArray[explicitLessonIndex] = value;
          return { ...prev, [studentId]: currentArray };
       });
     } else {
       setObservations(prev => {
-         const currentArray = prev[studentId] ? [...prev[studentId]] : Array(scheduleLessonsCount).fill("");
+         const currentArray = prev[studentId] ? [...prev[studentId]] : Array(6).fill("");
          currentArray[explicitLessonIndex] = value;
          return { ...prev, [studentId]: currentArray };
       });
     }
 
     try {
-      const currentStatusRow = attendance[studentId] || Array(scheduleLessonsCount).fill("P");
+      const currentStatusRow = attendance[studentId] || Array(6).fill("P");
       await saveAttendanceLesson({
         studentId,
         date: selectedDate, 
@@ -315,6 +327,40 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
           <div className="animate-in fade-in duration-500">
             <AsistenciaResumen attendance={attendance} totalEstudiantes={estudiantes.length} activeLessonIndex={activeLessonIndex} />
 
+            {/* Selector de lecciones reales del día (Usuario UX) */}
+            <div className="flex items-center gap-3 bg-indigo-50/40 border border-indigo-100 p-3 rounded-xl mb-4 shadow-sm">
+              <div className="bg-indigo-100 text-indigo-700 p-2 rounded-lg">
+                <Calendar size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider">Lecciones Impartidas hoy</span>
+                <span className="text-[11px] text-indigo-500 font-medium">
+                  Por defecto: {scheduleLessonsCount} lecciones programadas en horario.
+                </span>
+              </div>
+              <div className="ml-auto flex items-center gap-3">
+                <span className="text-xs font-bold text-indigo-900">Lecciones reales dadas hoy:</span>
+                <select
+                  value={actualLessonsCount}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setActualLessonsCount(val);
+                    // Si la lección activa seleccionada queda fuera del nuevo rango, apagarla
+                    if (activeLessonIndex !== null && activeLessonIndex >= val) {
+                      setActiveLessonIndex(null);
+                    }
+                  }}
+                  className="bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm font-black text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 shadow-sm cursor-pointer"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>
+                      {n} {n === 1 ? 'lección' : 'lecciones'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="mt-4 overflow-auto custom-scrollbar border border-gray-200 rounded-xl bg-white shadow-sm max-h-[65vh] relative">
               <div className="min-w-[1080px] w-full flex flex-col">
                 <div 
@@ -323,20 +369,29 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
                 >
                     <div className="pl-2">Estudiante</div>
                     <div className="text-center">Ubicación</div>
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className="flex flex-col items-center justify-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLessonIndex(prev => prev === i ? null : i)}
-                          className={`w-[18px] h-[18px] rounded border flex items-center justify-center transition-all cursor-pointer shadow-sm ${
-                            activeLessonIndex === i ? "bg-indigo-500 border-indigo-500 text-white scale-110" : "bg-white border-gray-300 hover:border-indigo-400"
-                          }`}
-                        >
-                          {activeLessonIndex === i && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
-                        </button>
-                        <span className="text-[12px] font-extrabold text-gray-700 leading-none">L{i + 1}</span>
-                      </div>
-                    ))}
+                    {Array.from({ length: 6 }).map((_, i) => {
+                      const isExcluded = i >= actualLessonsCount;
+                      return (
+                        <div key={i} className="flex flex-col items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isExcluded}
+                            onClick={() => setActiveLessonIndex(prev => prev === i ? null : i)}
+                            className={`w-[18px] h-[18px] rounded border flex items-center justify-center transition-all shadow-sm ${
+                              isExcluded 
+                                ? "bg-gray-100 border-gray-200 cursor-not-allowed opacity-30" 
+                                : activeLessonIndex === i 
+                                  ? "bg-indigo-500 border-indigo-500 text-white scale-110 cursor-pointer" 
+                                  : "bg-white border-gray-300 hover:border-indigo-400 cursor-pointer"
+                            }`}
+                          >
+                            {!isExcluded && activeLessonIndex === i && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                            {isExcluded && <span className="text-[10px] text-gray-300 leading-none">—</span>}
+                          </button>
+                          <span className={`text-[12px] font-extrabold leading-none ${isExcluded ? 'text-gray-300' : 'text-gray-700'}`}>L{i + 1}</span>
+                        </div>
+                      );
+                    })}
                     <div className="pl-3">Observaciones</div>
                   </div>
 
@@ -352,6 +407,7 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
                         onChange={handleAttendanceChange}
                         onMetadataChange={handleMetadataChange}
                         activeLessonIndex={activeLessonIndex}
+                        actualLessonsCount={actualLessonsCount}
                       />
                     ))}
                   </div>
@@ -362,7 +418,7 @@ export default function AsistenciaPage({ session, academicPeriod }: Props): Reac
               {saveSuccess && <span className="text-green-600 font-bold mr-4 self-center animate-pulse">¡Asistencia guardada!</span>}
               {saveError && <span className="text-red-500 text-sm mr-4 self-center">{saveError}</span>}
               <button 
-                onClick={() => guardar(attendance, locations, observations, scheduleLessonsCount, selectedDate, session.user.id, academicPeriod)}
+                onClick={() => guardar(attendance, locations, observations, actualLessonsCount, selectedDate, session.user.id, academicPeriod)}
                 disabled={isSaving}
                 className="bg-indigo-600 text-white font-medium px-6 py-2 rounded shadow hover:bg-indigo-700 disabled:opacity-50 transition-all cursor-pointer"
               >

@@ -22,7 +22,7 @@ export function useGuardarAsistencia() {
       attendanceData: Record<number, TAttendanceStatus[]>,
       locationsData: Record<number, string[]>,
       observationsData: Record<number, string[]>,
-      scheduleLessonsCount: number,
+      actualLessonsCount: number,
       localDateStr: string,
       ownerId: string,
       period: string
@@ -41,7 +41,7 @@ export function useGuardarAsistencia() {
   
         for (const [studentIdStr, lessons] of Object.entries(attendanceData)) {
           const studentId = Number(studentIdStr);
-          for (let idx = 0; idx < scheduleLessonsCount; idx++) {
+          for (let idx = 0; idx < actualLessonsCount; idx++) {
             const status = lessons[idx] || "P";
             recordsToInsert.push({
               student_id: studentId,
@@ -55,20 +55,32 @@ export function useGuardarAsistencia() {
             });
           }
         }
-
-      if (recordsToInsert.length === 0) {
-        setIsSaving(false);
-        return;
-      }
-
-      // 2. Insertar o Actualizar masivo (upsert) en attendance_lessons
-      const { error } = await supabase
-        .from("attendance_lessons")
-        .upsert(recordsToInsert, { 
-            onConflict: "student_id,attendance_date,lesson_number" 
-        });
-
-      if (error) throw error;
+  
+        if (recordsToInsert.length === 0) {
+          setIsSaving(false);
+          return;
+        }
+  
+        // 2. Insertar o Actualizar masivo (upsert) en attendance_lessons
+        const { error } = await supabase
+          .from("attendance_lessons")
+          .upsert(recordsToInsert, { 
+              onConflict: "student_id,attendance_date,lesson_number" 
+          });
+  
+        if (error) throw error;
+  
+        // 3. Limpiar lecciones excedentes en la base de datos si se redujo el selector
+        const studentIds = Object.keys(attendanceData).map(Number);
+        if (studentIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from("attendance_lessons")
+            .delete()
+            .in("student_id", studentIds)
+            .eq("attendance_date", localDateStr)
+            .gt("lesson_number", actualLessonsCount);
+          if (deleteError) throw deleteError;
+        }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000); 
