@@ -1723,14 +1723,29 @@ async function handleImportStudents(file: File) {
               </button>
               <button className="icon-action" type="button" title="Salir">
                 ⎋
-              </button>
+</button>
             </div>
             )}          
          </aside>
 
-     <main className="main-area">
-      <div className="app-header">
-       <header className="topbar">
+      <main className="main-area">
+       <div className="app-header">
+        <header 
+          className="topbar" 
+          style={{ 
+            background: academicPeriod === 'semester2' 
+              ? '#e6f4ea' 
+              : academicPeriod === 'annual' 
+                ? '#f3e8ff' 
+                : '#e0f2fe',
+            borderBottom: academicPeriod === 'semester2' 
+              ? '1px solid #c2e7cd' 
+              : academicPeriod === 'annual' 
+                ? '1px solid #d8b4fe' 
+                : '1px solid #bae6fd',
+            transition: 'all 0.3s ease'
+          }}
+        >
           <div className="topbar-main">
             <div className="topbar-left">
               
