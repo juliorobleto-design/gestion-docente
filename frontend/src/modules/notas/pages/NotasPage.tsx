@@ -178,7 +178,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       console.error("Error loading attendance grades:", err);
       return {};
     }
-  }, [groupId, students]);
+  }, [groupId, students, academicPeriod, session]);
 
   const loadManualGrades = useCallback(async () => {
     if (!groupId || students.length === 0) return;
@@ -219,44 +219,143 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   }, [groupId, students, academicPeriod, activeRubrics]);
 
   const loadAnnualGrades = useCallback(async () => {
-    if (!groupId || students.length === 0) return;
+    if (!session || !groupId || students.length === 0) return;
     
     setLoadingManual(true);
     try {
-      const { data, error } = await supabase
-        .from("grades")
-        .select("*")
-        .eq("group_id", groupId)
+      const studentIds = students.map(s => s.id);
+
+      // 1. Obtener asistencia de ambos semestres
+      const { data: attData } = await supabase
+        .from("attendance_lessons")
+        .select("student_id, status, period")
+        .in("student_id", studentIds)
         .in("period", ["semester1", "semester2"]);
 
-      if (error) throw error;
+      const attCounts: Record<string, Record<number, { total: number; present: number }>> = {
+        semester1: {},
+        semester2: {}
+      };
+      studentIds.forEach(id => {
+        attCounts.semester1[id] = { total: 0, present: 0 };
+        attCounts.semester2[id] = { total: 0, present: 0 };
+      });
 
-      // Calculate totals per student and period
-      const totals: Record<number, { s1: number, s1Count: number, s2: number, s2Count: number }> = {};
-      students.forEach(s => { totals[s.id] = { s1: 0, s1Count: 0, s2: 0, s2Count: 0 }; });
-
-      (data || []).forEach(row => {
-        if (!totals[row.student_id]) return;
-        const rubric = activeRubrics.find(r => r.id === row.rubric_id);
-        if (rubric) {
-          const contribution = (row.score * rubric.percentage) / 100;
-          if (row.period === 'semester1') {
-            totals[row.student_id].s1 += contribution;
-            totals[row.student_id].s1Count += 1;
-          } else {
-            totals[row.student_id].s2 += contribution;
-            totals[row.student_id].s2Count += 1;
-          }
+      (attData || []).forEach(row => {
+        const sid = row.student_id;
+        const period = row.period as 'semester1' | 'semester2';
+        if (!attCounts[period]) return;
+        if (!attCounts[period][sid]) attCounts[period][sid] = { total: 0, present: 0 };
+        
+        attCounts[period][sid].total += 1;
+        const status = String(row.status).toUpperCase();
+        if (status === "P" || status === "PRESENTE") {
+          attCounts[period][sid].present += 1;
+        } else if (status === "T" || status === "TARDÍA" || status === "TARDIA") {
+          attCounts[period][sid].present += 0.5;
         }
       });
 
+      const attPctMap: Record<string, Record<number, number | null>> = {
+        semester1: {},
+        semester2: {}
+      };
+      studentIds.forEach(id => {
+        const s1 = attCounts.semester1[id];
+        attPctMap.semester1[id] = s1 && s1.total > 0 ? (s1.present / s1.total) * 100 : null;
+
+        const s2 = attCounts.semester2[id];
+        attPctMap.semester2[id] = s2 && s2.total > 0 ? (s2.present / s2.total) * 100 : null;
+      });
+
+      // 2. Obtener trabajo cotidiano de ambos semestres
+      const { data: cwData } = await supabase
+        .from("daily_work_scores")
+        .select("student_id, score, total_points, period")
+        .in("student_id", studentIds)
+        .in("period", ["semester1", "semester2"]);
+
+      const cotPctMap: Record<string, Record<number, number | null>> = {
+        semester1: {},
+        semester2: {}
+      };
+      studentIds.forEach(id => {
+        cotPctMap.semester1[id] = null;
+        cotPctMap.semester2[id] = null;
+      });
+
+      (cwData || []).forEach(d => {
+        const sid = d.student_id;
+        const period = d.period as 'semester1' | 'semester2';
+        if (!cotPctMap[period]) return;
+        if (d.total_points && d.total_points > 0) {
+          cotPctMap[period][sid] = (d.score / d.total_points) * 100;
+        }
+      });
+
+      // 3. Obtener notas manuales de ambos semestres
+      const { data: gradesData } = await supabase
+        .from("grades")
+        .select("*")
+        .in("student_id", studentIds)
+        .in("period", ["semester1", "semester2"]);
+
+      const manualMap: Record<string, Record<number, Record<string, number | null>>> = {
+        semester1: {},
+        semester2: {}
+      };
+      studentIds.forEach(id => {
+        manualMap.semester1[id] = {};
+        manualMap.semester2[id] = {};
+      });
+
+      (gradesData || []).forEach(row => {
+        const sid = row.student_id;
+        const period = row.period as 'semester1' | 'semester2';
+        if (!manualMap[period]) return;
+        
+        activeRubrics.forEach(rubric => {
+          if (!isAutoSourcRubric(rubric.name)) {
+            const colName = rubricToColumn(rubric.name);
+            if (colName && row[colName] !== null && row[colName] !== undefined) {
+              if (!manualMap[period][sid]) manualMap[period][sid] = {};
+              manualMap[period][sid][rubric.id] = row[colName];
+            }
+          }
+        });
+      });
+
+      // 4. Calcular notas finales consolidadas por semestre
       const finalAnnual: Record<number, { s1: number | null, s2: number | null }> = {};
-      Object.keys(totals).forEach(sidStr => {
-        const sid = parseInt(sidStr);
-        const t = totals[sid];
+
+      studentIds.forEach(sid => {
+        const semesters: ('semester1' | 'semester2')[] = ['semester1', 'semester2'];
+        const semesterTotals = semesters.map(period => {
+          let total = 0;
+          let hasAnyGrade = false;
+
+          for (const rubric of activeRubrics) {
+            let grade: number | null = null;
+            if (isAttendanceRubric(rubric.name)) {
+              grade = attPctMap[period][sid];
+            } else if (isCotidianoRubric(rubric.name)) {
+              grade = cotPctMap[period][sid];
+            } else {
+              grade = manualMap[period][sid]?.[rubric.id] ?? null;
+            }
+
+            if (grade !== null && grade !== undefined) {
+              hasAnyGrade = true;
+              total += (grade * rubric.percentage) / 100;
+            }
+          }
+
+          return hasAnyGrade ? Math.round(total * 100) / 100 : null;
+        });
+
         finalAnnual[sid] = {
-          s1: t.s1Count > 0 ? Math.round(t.s1 * 100) / 100 : null,
-          s2: t.s2Count > 0 ? Math.round(t.s2 * 100) / 100 : null
+          s1: semesterTotals[0],
+          s2: semesterTotals[1]
         };
       });
 
@@ -267,7 +366,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
     } finally {
       setLoadingManual(false);
     }
-  }, [groupId, students, activeRubrics, setToast]);
+  }, [groupId, students, activeRubrics, setToast, session]);
 
 
   useEffect(() => {
@@ -524,9 +623,27 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   // ═══════════════════════════════════════
 
   const stats = useMemo(() => {
-    const finals = students
-      .map(s => calculateFinalGrade(s.id))
-      .filter((g): g is number => g !== null);
+    let finals: number[] = [];
+    if (academicPeriod === 'annual') {
+      finals = students
+        .map(s => {
+          const s1Total = annualData[s.id]?.s1 || null;
+          const s2Total = annualData[s.id]?.s2 || null;
+          if (s1Total !== null && s2Total !== null) {
+            return Math.round(((s1Total + s2Total) / 2) * 100) / 100;
+          } else if (s1Total !== null) {
+            return s1Total;
+          } else if (s2Total !== null) {
+            return s2Total;
+          }
+          return null;
+        })
+        .filter((g): g is number => g !== null);
+    } else {
+      finals = students
+        .map(s => calculateFinalGrade(s.id))
+        .filter((g): g is number => g !== null);
+    }
 
     if (finals.length === 0) return { avg: null, max: null, min: null, count: 0 };
 
@@ -536,7 +653,7 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       min: Math.min(...finals),
       count: finals.length,
     };
-  }, [manualGrades, autoGrades, students, activeRubrics]);
+  }, [manualGrades, autoGrades, annualData, academicPeriod, students, activeRubrics]);
 
   function getGradeColor(grade: number | null): string {
     if (grade === null) return "#94a3b8";
