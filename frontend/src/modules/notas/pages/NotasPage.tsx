@@ -226,11 +226,16 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       const studentIds = students.map(s => s.id);
 
       // 1. Obtener asistencia de ambos semestres
-      const { data: attData } = await supabase
+      const { data: attData, error: attErr } = await supabase
         .from("attendance_lessons")
         .select("student_id, status, period")
         .in("student_id", studentIds)
         .in("period", ["semester1", "semester2"]);
+      if (attErr) {
+        console.error("[loadAnnualGrades] Error attData:", attErr);
+        throw attErr;
+      }
+      console.log("[loadAnnualGrades] attData loaded:", attData?.length);
 
       const attCounts: Record<string, Record<number, { total: number; present: number }>> = {
         semester1: {},
@@ -269,11 +274,16 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       });
 
       // 2. Obtener trabajo cotidiano de ambos semestres
-      const { data: cwData } = await supabase
+      const { data: cwData, error: cwErr } = await supabase
         .from("daily_work_scores")
         .select("student_id, score, total_points, period")
         .in("student_id", studentIds)
         .in("period", ["semester1", "semester2"]);
+      if (cwErr) {
+        console.error("[loadAnnualGrades] Error cwData:", cwErr);
+        throw cwErr;
+      }
+      console.log("[loadAnnualGrades] cwData loaded:", cwData?.length);
 
       const cotPctMap: Record<string, Record<number, number | null>> = {
         semester1: {},
@@ -294,11 +304,16 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       });
 
       // 3. Obtener notas manuales de ambos semestres
-      const { data: gradesData } = await supabase
+      const { data: gradesData, error: gradesErr } = await supabase
         .from("grades")
         .select("*")
         .in("student_id", studentIds)
         .in("period", ["semester1", "semester2"]);
+      if (gradesErr) {
+        console.error("[loadAnnualGrades] Error gradesData:", gradesErr);
+        throw gradesErr;
+      }
+      console.log("[loadAnnualGrades] gradesData loaded:", gradesData?.length);
 
       const manualMap: Record<string, Record<number, Record<string, number | null>>> = {
         semester1: {},
