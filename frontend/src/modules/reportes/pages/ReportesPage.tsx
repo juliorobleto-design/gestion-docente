@@ -427,8 +427,9 @@ export default function ReportesPage({
             const rubricScores = activeRubrics.map(r => {
               const score = studentScores[r.id];
               if (score !== null && score !== undefined) {
-                notaFinal += (score * r.percentage) / 100;
-                return score.toFixed(1);
+                const points = (score * r.percentage) / 100;
+                notaFinal += points;
+                return points.toFixed(1);
               }
               return "—";
             });
