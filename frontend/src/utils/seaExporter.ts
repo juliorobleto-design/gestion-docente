@@ -53,10 +53,10 @@ export async function exportToSEACSV(
       }
     });
 
-    const attPct: Record<number, number> = {};
+    const attPoints: Record<number, number> = {};
     studentIds.forEach(id => {
       const a = attCounts[id];
-      attPct[id] = a && a.total > 0 ? Math.round((a.present / a.total) * 100) : 0;
+      attPoints[id] = a && a.total > 0 ? Math.round((a.present / a.total) * 5 * 10) / 10 : 0;
     });
 
     // 2. Obtener trabajo cotidiano de la base de datos
@@ -120,7 +120,7 @@ export async function exportToSEACSV(
       const cotidiano = cotPoints[student.id] || 0;
       const tareas = gradesMap[student.id]?.projects || 0;
       const prueba = gradesMap[student.id]?.test || 0;
-      const asistencia = attPct[student.id] || 0;
+      const asistencia = attPoints[student.id] || 0;
 
       csvLines.push(`${cleanCedula};${displayName};${cotidiano};${tareas};${prueba};${asistencia}`);
     });
