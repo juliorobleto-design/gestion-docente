@@ -515,6 +515,78 @@ export default function ReportesPage({
     }
   };
 
+  const generateStudentListPDF = () => {
+    if (!selectedGroup) {
+      alert("Por favor selecciona un grupo.");
+      return;
+    }
+    
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 20;
+
+      // 1. Header & Logo
+      if (appSettings.logoUrl) {
+        try {
+          doc.addImage(appSettings.logoUrl, 'PNG', margin, 15, 25, 25);
+        } catch (e) { console.error("Logo error:", e); }
+      }
+
+      doc.setFontSize(18);
+      doc.setTextColor(30, 41, 59); // slate-800
+      doc.text(appSettings.institutionName || "GESTIÓN DOCENTE", appSettings.logoUrl ? 50 : margin, 25);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text(`DOCENTE: ${appSettings.teacherName || "—"}`, appSettings.logoUrl ? 50 : margin, 32);
+      doc.text(`FECHA GENERACIÓN: ${new Date().toLocaleDateString()}`, appSettings.logoUrl ? 50 : margin, 37);
+
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42); // slate-900
+      doc.text(`LISTA DE ESTUDIANTES - GRUPO ${currentGroupName}`, pageWidth / 2, 53, { align: "center" });
+
+      // Table data
+      const tableHeaders = [["N°", "CÉDULA", "APELLIDOS Y NOMBRE"]];
+      const tableRows = filteredStudents.map((s, index) => [
+        (index + 1).toString(),
+        s.cedula || "—",
+        buildStudentDisplayName(s)
+      ]);
+
+      autoTable(doc, {
+        startY: 62,
+        head: tableHeaders,
+        body: tableRows,
+        theme: "striped",
+        headStyles: { fillColor: [79, 70, 229], halign: "left" },
+        styles: { fontSize: 11, cellPadding: 6 },
+        columnStyles: {
+          0: { width: 15, halign: "center" },
+          1: { width: 45 },
+          2: { halign: "left" }
+        }
+      });
+
+      // Download
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `Lista_Estudiantes_${currentGroupName}.pdf`;
+      downloadLink.style.display = 'none';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      setTimeout(() => {
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(pdfUrl);
+      }, 200);
+    } catch (error) {
+      console.error("Error generating student list PDF:", error);
+      alert("Ocurrió un error al generar el PDF de la lista de estudiantes.");
+    }
+  };
+
   return (
     <section className="content-wrap" style={{ paddingBottom: "135px" }}>
       {/* Header Module */}
@@ -696,6 +768,21 @@ export default function ReportesPage({
               >
                 {loading ? <Loader2 className="animate-spin" /> : <Download size={20} />}
                 {loading ? "Generando Reporte..." : "Generar Reporte PDF"}
+              </button>
+
+              <button 
+                onClick={generateStudentListPDF}
+                disabled={!selectedGroup}
+                style={{ 
+                  width: "100%", padding: "16px", borderRadius: "16px", background: "#475569", 
+                  color: "#fff", fontSize: "15px", fontWeight: 800, border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+                  boxShadow: "0 10px 20px rgba(71, 85, 105, 0.2)", transition: "all 0.2s"
+                }}
+                className="hover:bg-slate-700 active:scale-95"
+              >
+                <Users size={20} />
+                Descargar Lista Estudiantes (PDF)
               </button>
 
               <button 
