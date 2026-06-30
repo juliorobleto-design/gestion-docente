@@ -347,15 +347,6 @@ function getScheduleCell(day: string, startTime: string) {
  
   const moreMenuRef = useRef<HTMLDivElement | null>(null) 
   
-  // Stable derived values for child components
-  const stableEvaluationRubrics = useMemo(() => {
-    if (selectedGroup && groupConfigs[selectedGroup]?.evaluationRubrics) {
-      return groupConfigs[selectedGroup].evaluationRubrics;
-    }
-    return appSettings?.evaluationRubrics || [];
-  }, [selectedGroup, groupConfigs, appSettings?.evaluationRubrics]);
-  const stableGroups = useMemo(() => groups.map(g => ({ id: g.id, name: g.name })), [groups]);
-
   // Per-group evaluation configs (minimum passing grade, etc.)
   const [groupConfigs, setGroupConfigs] = useState<Record<number, { minimumPassingGrade: number; evaluationRubrics?: any[] }>>(() => {
     const saved = localStorage.getItem("gestion_docente_group_configs");
@@ -364,6 +355,15 @@ function getScheduleCell(day: string, startTime: string) {
     }
     return {};
   });
+
+  // Stable derived values for child components
+  const stableEvaluationRubrics = useMemo(() => {
+    if (selectedGroup && groupConfigs[selectedGroup]?.evaluationRubrics) {
+      return groupConfigs[selectedGroup].evaluationRubrics;
+    }
+    return appSettings?.evaluationRubrics || [];
+  }, [selectedGroup, groupConfigs, appSettings?.evaluationRubrics]);
+  const stableGroups = useMemo(() => groups.map(g => ({ id: g.id, name: g.name })), [groups]);
  
  const selectedGroupName =
   groups.find((g) => g.id === selectedGroup)?.name || ""
