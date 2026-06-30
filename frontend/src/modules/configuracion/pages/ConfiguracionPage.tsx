@@ -243,6 +243,17 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
     setLocalRubrics(prev => prev.filter(r => r.id !== id));
   };
 
+  const resetToDefaultRubrics = () => {
+    const defaultRubrics = [
+      { id: "e1", name: "ASISTENCIA", percentage: 10 },
+      { id: "e2", name: "COTIDIANO", percentage: 50 },
+      { id: "e3", name: "PROYECTOS", percentage: 10 },
+      { id: "e4", name: "PRUEBA 1", percentage: 15 },
+      { id: "e5", name: "PRUEBA 2", percentage: 15 }
+    ];
+    setLocalRubrics(defaultRubrics);
+  };
+
   // Copy logic
   const openCopyModal = () => {
     setSelectedCopyGroups([]);
@@ -627,13 +638,22 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                   )}
                </div>
 
-               <button 
-                 onClick={handleSave} 
-                 style={{ padding: "12px 32px", background: "#4f46e5", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "all 0.2s", boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)" }} 
-                 className="hover:bg-indigo-700"
-               >
-                  Guardar
-               </button>
+                <div style={{ display: "flex", gap: "12px" }}>
+                   <button 
+                     onClick={resetToDefaultRubrics} 
+                     style={{ padding: "12px 20px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "all 0.2s" }} 
+                     className="hover:bg-slate-200"
+                   >
+                      Restablecer Estándar
+                   </button>
+                   <button 
+                     onClick={handleSave} 
+                     style={{ padding: "12px 32px", background: "#4f46e5", color: "#fff", border: "none", borderRadius: "12px", fontWeight: 700, fontSize: "14px", cursor: "pointer", transition: "all 0.2s", boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)" }} 
+                     className="hover:bg-indigo-700"
+                   >
+                      Guardar
+                   </button>
+                </div>
             </div>
           </div>
 
