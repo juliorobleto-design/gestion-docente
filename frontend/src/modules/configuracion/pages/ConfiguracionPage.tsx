@@ -64,13 +64,15 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   const [copyRubrics, setCopyRubrics] = useState(true);
 
   React.useEffect(() => {
-    if (selectedGroupId) {
-      const rubrics = groupConfigs[selectedGroupId]?.evaluationRubrics || appSettings.evaluationRubrics;
+    const rubrics = (selectedGroupId ? groupConfigs[selectedGroupId]?.evaluationRubrics : null)
+      || appSettings?.evaluationRubrics
+      || [];
+    try {
       setLocalRubrics(JSON.parse(JSON.stringify(rubrics)));
-    } else {
-      setLocalRubrics(JSON.parse(JSON.stringify(appSettings.evaluationRubrics)));
+    } catch (e) {
+      setLocalRubrics([]);
     }
-  }, [selectedGroupId, groupConfigs, appSettings.evaluationRubrics]);
+  }, [selectedGroupId, groupConfigs, appSettings?.evaluationRubrics]);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const [toastLocal, setToastLocal] = useState<{message: string, type: 'success'|'error'} | null>(null);

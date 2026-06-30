@@ -352,8 +352,8 @@ function getScheduleCell(day: string, startTime: string) {
     if (selectedGroup && groupConfigs[selectedGroup]?.evaluationRubrics) {
       return groupConfigs[selectedGroup].evaluationRubrics;
     }
-    return appSettings.evaluationRubrics;
-  }, [selectedGroup, groupConfigs, appSettings.evaluationRubrics]);
+    return appSettings?.evaluationRubrics || [];
+  }, [selectedGroup, groupConfigs, appSettings?.evaluationRubrics]);
   const stableGroups = useMemo(() => groups.map(g => ({ id: g.id, name: g.name })), [groups]);
 
   // Per-group evaluation configs (minimum passing grade, etc.)
