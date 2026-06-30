@@ -24,6 +24,7 @@ type GroupInfo = {
 
 type GroupConfig = {
   minimumPassingGrade: number;
+  evaluationRubrics?: EvaluationRubric[];
 };
 
 type Props = {
@@ -57,6 +58,19 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   const [copySuccess, setCopySuccess] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+
+  const [localRubrics, setLocalRubrics] = useState<EvaluationRubric[]>([]);
+  const [copyMinGrade, setCopyMinGrade] = useState(true);
+  const [copyRubrics, setCopyRubrics] = useState(true);
+
+  React.useEffect(() => {
+    if (selectedGroupId) {
+      const rubrics = groupConfigs[selectedGroupId]?.evaluationRubrics || appSettings.evaluationRubrics;
+      setLocalRubrics(JSON.parse(JSON.stringify(rubrics)));
+    } else {
+      setLocalRubrics(JSON.parse(JSON.stringify(appSettings.evaluationRubrics)));
+    }
+  }, [selectedGroupId, groupConfigs, appSettings.evaluationRubrics]);
 
   const importInputRef = useRef<HTMLInputElement>(null);
   const [toastLocal, setToastLocal] = useState<{message: string, type: 'success'|'error'} | null>(null);
@@ -142,24 +156,37 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   const selectedCycle = getCycle(selectedGroupName);
 
   const totalPercentage = useMemo(() => {
-    return localSettings.evaluationRubrics.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
-  }, [localSettings.evaluationRubrics]);
+    return localRubrics.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
+  }, [localRubrics]);
 
   const handleSave = () => {
     if (!session?.user?.id) {
       showAuthError();
       return;
     }
-    // Save global settings
-    setAppSettings(localSettings);
-    localStorage.setItem("gestion_docente_settings", JSON.stringify(localSettings));
-
+    
     // Save per-group config
     if (selectedGroupId) {
       const clamped = Math.min(100, Math.max(0, localMinGrade || 0));
-      const updated = { ...groupConfigs, [selectedGroupId]: { minimumPassingGrade: clamped } };
+      const updated = { 
+        ...groupConfigs, 
+        [selectedGroupId]: { 
+          ...groupConfigs[selectedGroupId],
+          minimumPassingGrade: clamped,
+          evaluationRubrics: localRubrics 
+        } 
+      };
       setGroupConfigs(updated);
       localStorage.setItem("gestion_docente_group_configs", JSON.stringify(updated));
+      
+      // Save global settings (without mutating the global rubrics with this group's custom ones)
+      setAppSettings(localSettings);
+      localStorage.setItem("gestion_docente_settings", JSON.stringify(localSettings));
+    } else {
+      // Save global settings (and update default evaluation rubrics)
+      const updatedSettings = { ...localSettings, evaluationRubrics: localRubrics };
+      setAppSettings(updatedSettings);
+      localStorage.setItem("gestion_docente_settings", JSON.stringify(updatedSettings));
     }
 
     setSaveSuccess(true);
@@ -198,34 +225,27 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   };
 
   const addRubric = () => {
-    setLocalSettings(prev => ({
+    setLocalRubrics(prev => [
       ...prev,
-      evaluationRubrics: [
-        ...prev.evaluationRubrics,
-        { id: `ev-${Date.now()}`, name: "NUEVO RUBRO", percentage: 0 }
-      ]
-    }));
+      { id: `ev-${Date.now()}`, name: "NUEVO RUBRO", percentage: 0 }
+    ]);
   };
 
   const updateRubric = (id: string, field: "name" | "percentage", value: string | number) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      evaluationRubrics: prev.evaluationRubrics.map(r => 
-        r.id === id ? { ...r, [field]: value } : r
-      )
-    }));
+    setLocalRubrics(prev => prev.map(r => 
+      r.id === id ? { ...r, [field]: value } : r
+    ));
   };
 
   const removeRubric = (id: string) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      evaluationRubrics: prev.evaluationRubrics.filter(r => r.id !== id)
-    }));
+    setLocalRubrics(prev => prev.filter(r => r.id !== id));
   };
 
   // Copy logic
   const openCopyModal = () => {
     setSelectedCopyGroups([]);
+    setCopyMinGrade(true);
+    setCopyRubrics(true);
     setCopySuccess(false);
     setShowCopyModal(true);
   };
@@ -250,10 +270,16 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
       return;
     }
     if (selectedCopyGroups.length === 0) return;
-    const clamped = Math.min(100, Math.max(0, localMinGrade || 0));
+    if (!copyMinGrade && !copyRubrics) return;
+
     const updated = { ...groupConfigs };
     selectedCopyGroups.forEach(gId => {
-      updated[gId] = { ...(updated[gId] || {}), minimumPassingGrade: clamped };
+      const existing = updated[gId] || { minimumPassingGrade: 65 };
+      updated[gId] = {
+        ...existing,
+        ...(copyMinGrade ? { minimumPassingGrade: Math.min(100, Math.max(0, localMinGrade || 0)) } : {}),
+        ...(copyRubrics ? { evaluationRubrics: localRubrics } : {})
+      };
     });
     setGroupConfigs(updated);
     localStorage.setItem("gestion_docente_group_configs", JSON.stringify(updated));
@@ -518,15 +544,32 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
           {/* Card: Evaluación % */}
           <div style={{ background: "#fff", borderRadius: "16px", padding: "32px", border: "1px solid #e2e8f0", boxShadow: "0 4px 15px rgba(0,0,0,0.03)", display: "flex", flexDirection: "column" }}>
             
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "32px" }}>
-               <div style={{ background: "#eef2ff", color: "#4f46e5", padding: "10px", borderRadius: "12px" }}>
-                  <Percent size={20} />
-               </div>
-               <h2 style={{ fontSize: "16px", fontWeight: 800, color: "#1e293b", margin: 0 }}>Evaluación (%)</h2>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                 <div style={{ background: "#eef2ff", color: "#4f46e5", padding: "10px", borderRadius: "12px" }}>
+                    <Percent size={20} />
+                 </div>
+                 <h2 style={{ fontSize: "16px", fontWeight: 800, color: "#1e293b", margin: 0 }}>Evaluación (%)</h2>
+              </div>
+              {selectedGroupId && otherGroups.length > 0 && (
+                <button
+                  onClick={openCopyModal}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "6px",
+                    padding: "9px 16px", background: "#e0e7ff", color: "#4f46e5",
+                    border: "1px solid #c7d2fe", borderRadius: "10px",
+                    fontWeight: 700, fontSize: "12px", cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                  className="hover:bg-indigo-100"
+                >
+                  <Copy size={14} /> Copiar a otros grupos
+                </button>
+              )}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px", marginBottom: "32px", alignContent: "start" }}>
-               {localSettings.evaluationRubrics.map((rubric) => (
+               {localRubrics.map((rubric) => (
                   <div key={rubric.id} className="group" style={{ position: "relative" }}>
                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                         <input 
@@ -684,7 +727,7 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
 
 
       {/* ═══════════════════════════════════════════
-          MODAL: Copiar Nota Mínima a Otros Grupos
+          MODAL: Copiar Configuración a Otros Grupos
           ═══════════════════════════════════════════ */}
       {showCopyModal && (
         <div
@@ -712,10 +755,10 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                   <div style={{ background: "#fef3c7", color: "#d97706", padding: "8px", borderRadius: "10px" }}>
                     <Copy size={20} />
                   </div>
-                  <h2 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Copiar Nota Mínima</h2>
+                  <h2 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: 0 }}>Copiar Configuración</h2>
                 </div>
                 <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0", fontWeight: 500 }}>
-                  Aplicar <strong style={{ color: "#92400e" }}>{localMinGrade} pts</strong> desde {selectedGroupName} a otros grupos
+                  Copiar la configuración de <strong style={{ color: "#4f46e5" }}>{selectedGroupName}</strong> a otros grupos
                 </p>
               </div>
               <button
@@ -726,8 +769,35 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
               </button>
             </div>
 
+            {/* Checkboxes for target copy content */}
+            {!copySuccess && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "14px 28px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc" }}>
+                <span style={{ fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>¿Qué deseas copiar?</span>
+                <div style={{ display: "flex", gap: "20px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 700, color: "#334155", cursor: "pointer" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={copyMinGrade} 
+                      onChange={e => setCopyMinGrade(e.target.checked)} 
+                      style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "#d97706" }}
+                    />
+                    Nota Mínima ({localMinGrade} pts)
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 700, color: "#334155", cursor: "pointer" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={copyRubrics} 
+                      onChange={e => setCopyRubrics(e.target.checked)} 
+                      style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "#d97706" }}
+                    />
+                    Rúbrica ({localRubrics.length} rubros)
+                  </label>
+                </div>
+              </div>
+            )}
+
             {/* Groups List */}
-            <div style={{ padding: "16px 28px", maxHeight: "360px", overflowY: "auto" }}>
+            <div style={{ padding: "16px 28px", maxHeight: "300px", overflowY: "auto" }}>
               {copySuccess ? (
                 <div style={{ textAlign: "center", padding: "32px 0" }}>
                   <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "#ecfdf5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", border: "2px solid #a7f3d0" }}>
@@ -768,6 +838,8 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                       {cycleGroups.map(g => {
                         const isChecked = selectedCopyGroups.includes(g.id);
                         const existingMin = groupConfigs[g.id]?.minimumPassingGrade;
+                        const existingRubrics = groupConfigs[g.id]?.evaluationRubrics;
+                        
                         return (
                           <div
                             key={g.id}
@@ -792,11 +864,10 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                             <span style={{ fontSize: "14px", fontWeight: 600, color: "#0f172a", flex: 1 }}>
                               {g.name}
                             </span>
-                            {existingMin !== undefined && (
-                              <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600 }}>
-                                actual: {existingMin}
-                              </span>
-                            )}
+                            <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                              {existingMin !== undefined && <span>Mín: {existingMin} pts</span>}
+                              {existingRubrics && <span>{existingRubrics.length} rubros</span>}
+                            </span>
                           </div>
                         );
                       })}
@@ -824,13 +895,13 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                   </button>
                   <button
                     onClick={handleCopy}
-                    disabled={selectedCopyGroups.length === 0}
+                    disabled={selectedCopyGroups.length === 0 || (!copyMinGrade && !copyRubrics)}
                     style={{
-                      padding: "10px 24px", background: selectedCopyGroups.length > 0 ? "#d97706" : "#e2e8f0",
-                      color: selectedCopyGroups.length > 0 ? "#fff" : "#94a3b8",
+                      padding: "10px 24px", background: (selectedCopyGroups.length > 0 && (copyMinGrade || copyRubrics)) ? "#d97706" : "#e2e8f0",
+                      color: (selectedCopyGroups.length > 0 && (copyMinGrade || copyRubrics)) ? "#fff" : "#94a3b8",
                       border: "none", borderRadius: "10px", fontWeight: 700, fontSize: "13px",
-                      cursor: selectedCopyGroups.length > 0 ? "pointer" : "not-allowed",
-                      boxShadow: selectedCopyGroups.length > 0 ? "0 4px 12px rgba(217, 119, 6, 0.2)" : "none"
+                      cursor: (selectedCopyGroups.length > 0 && (copyMinGrade || copyRubrics)) ? "pointer" : "not-allowed",
+                      boxShadow: (selectedCopyGroups.length > 0 && (copyMinGrade || copyRubrics)) ? "0 4px 12px rgba(217, 119, 6, 0.2)" : "none"
                     }}
                   >
                     Aplicar a {selectedCopyGroups.length} grupo(s)
