@@ -158,8 +158,10 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         } else if (status === "T" || status === "TARDÍA" || status === "TARDIA") {
           // Tardía counts as 0.5 attendance
           attendance[sid].present += 0.5;
+        } else if (status === "J" || status === "JUSTIFICADA") {
+          // Justified absence counts as 1.0 (no penalty)
+          attendance[sid].present += 1;
         }
-        // "A" / "ausente" or "J" / "justificada" = no points
       });
 
       // Convert to percentage (0-100) for each student
@@ -257,6 +259,8 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
           attCounts[period][sid].present += 1;
         } else if (status === "T" || status === "TARDÍA" || status === "TARDIA") {
           attCounts[period][sid].present += 0.5;
+        } else if (status === "J" || status === "JUSTIFICADA") {
+          attCounts[period][sid].present += 1;
         }
       });
 

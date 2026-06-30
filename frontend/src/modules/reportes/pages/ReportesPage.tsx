@@ -211,7 +211,7 @@ export default function ReportesPage({
           const attendanceRows = studentIds.map(id => {
             const s = allStudents.find(st => st.id === id);
             const stats = attendanceMap[id];
-            const presenceVal = stats.present + (stats.late * 0.5);
+            const presenceVal = stats.present + stats.justified + (stats.late * 0.5);
             const pct = stats.total > 0 ? ((presenceVal / stats.total) * 100).toFixed(1) : "0";
             return [s ? buildStudentDisplayName(s) : "—", stats.present, stats.late, stats.absent, stats.justified, stats.total, `${pct}%`];
           });
