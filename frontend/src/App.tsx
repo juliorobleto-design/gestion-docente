@@ -327,10 +327,7 @@ function getScheduleCell(day: string, startTime: string) {
 
   const [appSettings, setAppSettings] = useState<any>(() => {
     const saved = localStorage.getItem("gestion_docente_settings");
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return {
+    const defaultSettings = {
       institutionName: "Mi Institución",
       teacherName: "Docente",
       teacherEmail: "usuario@mep.go.cr",
@@ -343,6 +340,18 @@ function getScheduleCell(day: string, startTime: string) {
         { id: "e5", name: "PRUEBA 2", percentage: 15 }
       ]
     };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          if (!Array.isArray(parsed.evaluationRubrics)) {
+            parsed.evaluationRubrics = [...defaultSettings.evaluationRubrics];
+          }
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return defaultSettings;
   });
  
   const moreMenuRef = useRef<HTMLDivElement | null>(null) 
@@ -351,7 +360,10 @@ function getScheduleCell(day: string, startTime: string) {
   const [groupConfigs, setGroupConfigs] = useState<Record<number, { minimumPassingGrade: number; evaluationRubrics?: any[] }>>(() => {
     const saved = localStorage.getItem("gestion_docente_group_configs");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch (e) {}
     }
     return {};
   });
