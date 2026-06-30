@@ -563,10 +563,10 @@ export default function ReportesPage({
         headStyles: { fillColor: [79, 70, 229], halign: "left", fontSize: 9.5, cellPadding: 4 },
         styles: { fontSize: 9, cellPadding: 3.5, lineColor: [226, 232, 240] },
         columnStyles: {
-          0: { width: 12, halign: "center" },
-          1: { width: 35 },
-          2: { halign: "left" },
-          3: { width: 55 } // Espacio generoso para la firma
+          0: { cellWidth: 10, halign: "center" },
+          1: { cellWidth: 28 },
+          2: { cellWidth: 62 },
+          3: { cellWidth: 70 } // Espacio muy amplio para la firma
         }
       });
 
