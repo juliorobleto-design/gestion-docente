@@ -547,24 +547,26 @@ export default function ReportesPage({
       doc.text(`LISTA DE ESTUDIANTES - GRUPO ${currentGroupName}`, pageWidth / 2, 53, { align: "center" });
 
       // Table data
-      const tableHeaders = [["N°", "CÉDULA", "APELLIDOS Y NOMBRE"]];
+      const tableHeaders = [["N°", "CÉDULA", "APELLIDOS Y NOMBRE", "FIRMA"]];
       const tableRows = filteredStudents.map((s, index) => [
         (index + 1).toString(),
         s.cedula || "—",
-        buildStudentDisplayName(s)
+        buildStudentDisplayName(s),
+        "" // Columna vacía para la firma
       ]);
 
       autoTable(doc, {
-        startY: 62,
+        startY: 59,
         head: tableHeaders,
         body: tableRows,
-        theme: "striped",
-        headStyles: { fillColor: [79, 70, 229], halign: "left" },
-        styles: { fontSize: 11, cellPadding: 6 },
+        theme: "grid",
+        headStyles: { fillColor: [79, 70, 229], halign: "left", fontSize: 9.5, cellPadding: 4 },
+        styles: { fontSize: 9, cellPadding: 3.5, lineColor: [226, 232, 240] },
         columnStyles: {
-          0: { width: 15, halign: "center" },
-          1: { width: 45 },
-          2: { halign: "left" }
+          0: { width: 12, halign: "center" },
+          1: { width: 35 },
+          2: { halign: "left" },
+          3: { width: 55 } // Espacio generoso para la firma
         }
       });
 
