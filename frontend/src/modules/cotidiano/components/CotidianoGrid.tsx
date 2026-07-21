@@ -536,12 +536,27 @@ export default function CotidianoGrid({
               const isMaxedOut = rowTotal >= globalPercentageTarget;
 
               return (
-                <tr key={student.id} className="group hover:bg-indigo-50 transition-colors">
+                <tr key={student.id} className="group hover:bg-indigo-100/80 transition-colors duration-150">
                   {/* Sticky Student Name */}
-                  <td style={{ position: "sticky", left: 0, zIndex: 10, background: "inherit", borderBottom: "1px solid #e2e8f0", borderRight: "2px solid #e2e8f0", padding: "16px", backgroundColor: "white" }} className="group-hover:bg-indigo-50">
+                  <td 
+                    style={{ position: "sticky", left: 0, zIndex: 10, borderBottom: "1px solid #cbd5e1", borderRight: "2px solid #cbd5e1", padding: "14px 16px", transition: "all 0.15s ease" }} 
+                    className="bg-white group-hover:bg-indigo-100 group-hover:border-l-4 group-hover:border-l-indigo-600"
+                  >
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>{buildStudentDisplayName(student)}</span>
-                      {student.cedula && <span style={{ fontSize: "12px", color: "#64748b" }}>{student.cedula}</span>}
+                      <span 
+                        style={{ fontSize: "14px", fontWeight: 700, transition: "all 0.15s ease" }}
+                        className="text-slate-800 group-hover:text-indigo-950 group-hover:font-extrabold"
+                      >
+                        {buildStudentDisplayName(student)}
+                      </span>
+                      {student.cedula && (
+                        <span 
+                          style={{ fontSize: "12px", transition: "all 0.15s ease" }}
+                          className="text-slate-500 group-hover:text-indigo-700 font-semibold"
+                        >
+                          {student.cedula}
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -550,7 +565,10 @@ export default function CotidianoGrid({
                     const cellVal = gridData[student.id]?.[col.id]?.value ?? "";
                     return (
                       <td key={col.id} style={{ borderBottom: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", padding: "8px", textAlign: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", background: "#fff", padding: "6px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)", transition: "all 0.2s" }} className="focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200">
+                        <div 
+                          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", padding: "6px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)", transition: "all 0.15s ease" }} 
+                          className="bg-white group-hover:bg-indigo-50/90 group-hover:border-indigo-400 group-hover:shadow-sm focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-200"
+                        >
                           <input 
                             type="text"
                             inputMode="decimal"
@@ -597,10 +615,13 @@ export default function CotidianoGrid({
                   })}
 
                   {/* Empty Add Col area */}
-                  <td style={{ borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}></td>
+                  <td style={{ borderBottom: "1px solid #e2e8f0" }} className="bg-slate-50 group-hover:bg-indigo-100/50 transition-colors duration-150"></td>
 
                   {/* Total Student Col - Sticky Right */}
-                  <td style={{ position: "sticky", right: 0, zIndex: 10, background: "inherit", borderBottom: "1px solid #e2e8f0", borderLeft: "2px solid #e2e8f0", padding: "12px", textAlign: "center", backgroundColor: "white", color: isMaxedOut ? "#10b981" : "#0f172a" }} className="group-hover:bg-indigo-50">
+                  <td 
+                    style={{ position: "sticky", right: 0, zIndex: 10, borderBottom: "1px solid #cbd5e1", borderLeft: "2px solid #cbd5e1", padding: "12px", textAlign: "center", color: isMaxedOut ? "#059669" : "#0f172a", transition: "all 0.15s ease" }} 
+                    className="bg-white group-hover:bg-indigo-100"
+                  >
                      <span style={{ fontSize: "18px", fontWeight: 800 }}>{rowTotal}</span>
                      <span style={{ fontSize: "12px", fontWeight: 700, marginLeft: "2px" }}>%</span>
                   </td>

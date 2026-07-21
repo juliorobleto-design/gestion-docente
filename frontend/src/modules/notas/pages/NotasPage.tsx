@@ -1022,25 +1022,35 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
                   return (
                     <tr
                       key={student.id}
-                      style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.15s ease" }}
-                      className="hover:bg-slate-50"
+                      style={{ borderBottom: "1px solid #e2e8f0", transition: "background 0.15s ease" }}
+                      className="group hover:bg-indigo-100/80 transition-colors duration-150"
                     >
                       {/* Student Name — Sticky */}
-                      <td style={{
-                        padding: "12px 20px", fontWeight: 600, fontSize: "14px", color: "#0f172a",
-                        position: "sticky", left: 0, background: "#fff", zIndex: 5,
-                        borderRight: "1px solid #f1f5f9"
-                      }}>
+                      <td 
+                        style={{
+                          padding: "12px 20px", fontSize: "14px",
+                          position: "sticky", left: 0, zIndex: 5,
+                          borderRight: "2px solid #cbd5e1",
+                          transition: "all 0.15s ease"
+                        }}
+                        className="bg-white group-hover:bg-indigo-100 group-hover:border-l-4 group-hover:border-l-indigo-600"
+                      >
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                          <span style={{
-                            width: "28px", height: "28px", borderRadius: "8px",
-                            background: "#eef2ff", color: "#4f46e5",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "12px", fontWeight: 800, flexShrink: 0
-                          }}>
+                          <span 
+                            style={{
+                              width: "28px", height: "28px", borderRadius: "8px",
+                              fontSize: "12px", fontWeight: 800, flexShrink: 0,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.15s ease"
+                            }}
+                            className="bg-indigo-100 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white"
+                          >
                             {index + 1}
                           </span>
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span 
+                            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "all 0.15s ease" }}
+                            className="font-bold text-slate-800 group-hover:text-indigo-950 group-hover:font-black"
+                          >
                             {buildStudentDisplayName(student)}
                           </span>
                         </div>
