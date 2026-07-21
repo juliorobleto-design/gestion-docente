@@ -62,7 +62,7 @@ export default function CotidianoGrid({
   const cotidianoRubric = evaluationRubrics.find(r => r.name?.toLowerCase().includes("cotidiano"));
   const globalPercentageTarget = cotidianoRubric ? Number(cotidianoRubric.percentage) : 40;
 
-  // RESET: Limpiar estado al cambiar de grupo para evitar contaminación cruzada
+  // RESET: Limpiar estado al cambiar de grupo o periodo para evitar contaminación cruzada
   useEffect(() => {
     // CRITICAL: Cancelar cualquier auto-save pendiente ANTES de limpiar datos
     if (autoSaveTimerRef.current) {
@@ -74,8 +74,8 @@ export default function CotidianoGrid({
     setConfigId(null);
     setColumns([]);
     setGridData({});
-    isInitialLoadRef.current = true; // Marcar como carga inicial para e nuevo grupo
-  }, [selectedGroupId]);
+    isInitialLoadRef.current = true; // Marcar como carga inicial
+  }, [selectedGroupId, academicPeriod]);
 
   // Load Data — con abort controller para cancelar cargas obsoletas
   useEffect(() => {
@@ -88,13 +88,15 @@ export default function CotidianoGrid({
       }
       setIsLoading(true);
       try {
+        const periodToUse = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+
         // 1. Cargar configuración de columnas
-        console.log(`[LOAD] group_id=${selectedGroupId}, period=${academicPeriod}`);
+        console.log(`[LOAD] group_id=${selectedGroupId}, period=${periodToUse}`);
         const { data: configData, error: configErr } = await supabase
           .from("cotidiano_columns_config")
           .select("id, columns_data")
           .eq("group_id", selectedGroupId)
-          .eq("period", academicPeriod)
+          .eq("period", periodToUse)
           .maybeSingle();
 
         if (cancelled) return; // Abortar si ya cambió el grupo
@@ -123,7 +125,7 @@ export default function CotidianoGrid({
             .from("daily_work_scores")
             .select("id, student_id, matrix_cells, score")
             .in("student_id", studentIds)
-            .eq("period", academicPeriod);
+            .eq("period", periodToUse);
           
           if (cancelled) return; // Abortar si ya cambió el grupo
 
@@ -212,17 +214,19 @@ export default function CotidianoGrid({
     
     setIsSaving(true);
     try {
+      const periodToUse = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+
       // 1. Guardado de Configuración de Columnas
       const { data: existingCfg } = await supabase
         .from("cotidiano_columns_config")
         .select("id")
         .eq("group_id", Number(selectedGroupId))
-        .eq("period", academicPeriod)
+        .eq("period", periodToUse)
         .maybeSingle();
 
       const cfgPayload = {
         group_id: Number(selectedGroupId),
-        period: academicPeriod,
+        period: periodToUse,
         owner_id: session.user.id,
         columns_data: columns
       };
@@ -249,16 +253,21 @@ export default function CotidianoGrid({
       if (students.length > 0) {
         const studentIds = students.map(s => Number(s.id));
         
-        // Obtener cuáles registros de estudiante ya existen para este periodo (obteniendo id y student_id)
+        // Obtener todos los registros de estos estudiantes (tanto de este periodo como generales)
         const { data: existingRows } = await supabase
           .from("daily_work_scores")
-          .select("id, student_id")
-          .in("student_id", studentIds)
-          .eq("period", academicPeriod);
+          .select("id, student_id, period")
+          .in("student_id", studentIds);
 
-        const existingMap = new Map<string, any>();
+        const exactMap = new Map<string, number | string>();
+        const anyMap = new Map<string, number | string>();
+
         (existingRows || []).forEach(r => {
-          existingMap.set(String(r.student_id), r);
+          const sid = String(r.student_id);
+          anyMap.set(sid, r.id);
+          if (r.period === periodToUse) {
+            exactMap.set(sid, r.id);
+          }
         });
 
         await Promise.all(students.map(async (st) => {
@@ -268,45 +277,50 @@ export default function CotidianoGrid({
           
           const payload = {
             student_id: sid,
-            period: academicPeriod,
+            period: periodToUse,
             score: rowTotal,
             total_points: globalPercentageTarget,
             owner_id: session.user.id,
             matrix_cells: cells
           };
 
-          const existingRec = existingMap.get(String(sid));
+          const exactId = exactMap.get(String(sid));
+          const fallbackAnyId = anyMap.get(String(sid));
 
-          if (existingRec && existingRec.id) {
-            // Actualización directa por ID primario (100% garantizado)
+          if (exactId) {
+            // Actualización directa por ID exacto de período (100% confiable)
             const { error: updErr } = await supabase
               .from("daily_work_scores")
               .update(payload)
-              .eq("id", existingRec.id);
+              .eq("id", exactId);
             
             if (updErr) {
-              console.warn(`[SAVE] Error al actualizar por ID ${existingRec.id}, intentando por student_id:`, updErr.message);
-              await supabase
-                .from("daily_work_scores")
-                .update(payload)
-                .eq("student_id", sid)
-                .eq("period", academicPeriod);
+              console.warn(`[SAVE] Error actualizando por ID ${exactId}:`, updErr.message);
             }
           } else {
+            // Intentar inserción de nuevo registro para este período
             const { error: insErr } = await supabase
               .from("daily_work_scores")
               .insert(payload);
 
             if (insErr) {
-              // Fallback si colisiona por duplicado
-              const { error: fallbackErr } = await supabase
-                .from("daily_work_scores")
-                .update(payload)
-                .eq("student_id", sid)
-                .eq("period", academicPeriod);
+              console.warn(`[SAVE] Insert falló para estudiante ${sid} (${insErr.message}), ejecutando update de respaldo...`);
+              // Si la tabla no permite múltiples filas por estudiante, actualizar el registro existente del estudiante cambiando el período y celdas
+              const targetId = fallbackAnyId;
+              if (targetId) {
+                const { error: fbErr } = await supabase
+                  .from("daily_work_scores")
+                  .update(payload)
+                  .eq("id", targetId);
 
-              if (fallbackErr) {
-                console.error(`[SAVE] Fallback err para estudiante ${sid}:`, fallbackErr);
+                if (fbErr) {
+                  console.error(`[SAVE] Fallback por ID ${targetId} falló:`, fbErr);
+                }
+              } else {
+                await supabase
+                  .from("daily_work_scores")
+                  .update(payload)
+                  .eq("student_id", sid);
               }
             }
           }
