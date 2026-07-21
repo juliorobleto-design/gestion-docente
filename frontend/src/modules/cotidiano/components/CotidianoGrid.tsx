@@ -202,7 +202,7 @@ export default function CotidianoGrid({
       return;
     }
     
-    // GUARDIA: No guardar si los datos están vacíos (estado de transición entre grupos)
+    // GUARDIA: No guardar si las columnas están vacías (estado de transición entre grupos)
     if (columns.length === 0) {
       console.log("[SAVE] Abortado: columns vacías (transición de grupo)");
       return;
@@ -211,122 +211,43 @@ export default function CotidianoGrid({
     setIsSaving(true);
     try {
       // 1. Guardado Atómico de Columnas de Configuración
-      // Verificar frescura de la base de datos para no pisar Unique Constraint
-      const { data: existingCfg, error: existChkErr } = await supabase
-        .from("cotidiano_columns_config")
-        .select("id")
-        .eq("group_id", selectedGroupId)
-        .eq("period", academicPeriod)
-        .maybeSingle();
-
-      console.log(`[SAVE] group_id=${selectedGroupId}, period=${academicPeriod}, existingCfg=`, existingCfg, "checkErr=", existChkErr);
-
-      const finalConfigId = existingCfg?.id || configId;
-
-      const cfgPayload: any = {
-        group_id: selectedGroupId,
+      const cfgPayload = {
+        group_id: Number(selectedGroupId),
         period: academicPeriod,
         owner_id: session.user.id,
         columns_data: columns
       };
 
-      if (finalConfigId) {
-        // Update explícito
-        console.log(`[SAVE] UPDATE config id=${finalConfigId}, columns=`, columns.length);
-        const { data: updData, error: cfgUpdErr } = await supabase
-          .from("cotidiano_columns_config")
-          .update({ columns_data: columns })
-          .eq("id", finalConfigId)
-          .select("id, columns_data");
-        console.log("[SAVE] UPDATE result:", updData, cfgUpdErr);
-        if (cfgUpdErr) throw new Error(`Al actualizar configuración: ${cfgUpdErr.message}`);
-        setConfigId(finalConfigId);
-      } else {
-        // Insert explícito
-        console.log("[SAVE] INSERT config payload:", cfgPayload);
-        const { data: newCfg, error: cfgInsErr } = await supabase
-          .from("cotidiano_columns_config")
-          .insert(cfgPayload)
-          .select("id")
-          .single();
-        console.log("[SAVE] INSERT result:", newCfg, cfgInsErr);
-        if (cfgInsErr) throw new Error(`Al guardar configuración inicial: ${cfgInsErr.message}`);
-        if (newCfg) setConfigId(newCfg.id);
-      }
+      const { data: cfgData, error: cfgErr } = await supabase
+        .from("cotidiano_columns_config")
+        .upsert(cfgPayload, { onConflict: "group_id,period" })
+        .select("id")
+        .maybeSingle();
 
-      // 2. UPSERT Celda de cada Estudiante (actualizando score y matrix_cells)
-      const studentIds = students.map(s => s.id);
-      
-      // Necesitamos obtener qué estudiantes ya existen para hacer update en lugar de insert
-      // Utilizamos únicamente student_id para la comparación ya que la tabla daily_work_scores no posée id propio en algunas fases.
-      const { data: existing } = await supabase
-        .from("daily_work_scores")
-        .select("student_id")
-        .in("student_id", studentIds)
-        .eq("period", academicPeriod);
-      
-      const existingSet = new Set(existing?.map(e => String(e.student_id)));
+      if (cfgErr) throw new Error(`Al guardar configuración de cotidiano: ${cfgErr.message}`);
+      if (cfgData?.id) setConfigId(cfgData.id);
 
-      const scoresPayload = students.map(st => {
-        const rowTotal = calculateTotal(st.id);
-        const cells = gridData[st.id] || {};
-        
-        const payload: any = {
-          student_id: st.id,
-          period: academicPeriod,
-          score: rowTotal,
-          total_points: globalPercentageTarget,
-          owner_id: session.user.id,
-          matrix_cells: cells,
-          _exists: existingSet.has(String(st.id)) // Bandera interna
-        };
+      // 2. Guardado Atómico de Notas de Estudiantes
+      if (students.length > 0) {
+        const scoresPayload = students.map(st => {
+          const rowTotal = calculateTotal(st.id);
+          const cells = gridData[st.id] || gridData[String(st.id)] || gridData[Number(st.id)] || {};
+          
+          return {
+            student_id: Number(st.id),
+            period: academicPeriod,
+            score: rowTotal,
+            total_points: globalPercentageTarget,
+            owner_id: session.user.id,
+            matrix_cells: cells
+          };
+        });
 
-        return payload;
-      });
+        const { error: scoresErr } = await supabase
+          .from("daily_work_scores")
+          .upsert(scoresPayload, { onConflict: "student_id,period" });
 
-      // Separar actualizaciones e inserciones puras
-      const recordsToUpdate = scoresPayload.filter(p => p._exists);
-      const recordsToInsert = scoresPayload.filter(p => !p._exists);
-
-      // Usar Promise.all para actualizaciones atómicas seguras y esquivar el bulk upsert
-      if (recordsToUpdate.length > 0) {
-        await Promise.all(recordsToUpdate.map(async (record) => {
-          const { _exists, ...updateData } = record;
-          const { error: updErr } = await supabase
-            .from("daily_work_scores")
-            .update(updateData)
-            .eq("student_id", updateData.student_id)
-            .eq("period", updateData.period);
-          if (updErr) throw new Error(`Al actualizar nota: ${updErr.message}`);
-        }));
-      }
-
-      if (recordsToInsert.length > 0) {
-        // Fallback robusto en la inserción
-        for (const record of recordsToInsert) {
-          const { _exists, ...insertData } = record;
-          const { error: insErr } = await supabase
-            .from("daily_work_scores")
-            .insert(insertData);
-            
-          if (insErr) {
-            // Error 23505: Violación de PKEY o Unique Constraint
-            if (insErr.code === '23505' || insErr.message.includes('duplicate key')) {
-              console.warn(`Fallback UPDATE para registro de estudiante ${record.student_id} tras colisión.`);
-              const { error: fallbackErr } = await supabase
-                .from("daily_work_scores")
-                .update(insertData)
-                .eq("student_id", insertData.student_id)
-                .eq("period", insertData.period);
-                
-              if (fallbackErr) {
-                throw new Error(`InsErr: ${insErr.message} | FallbackErr: ${fallbackErr.message}`);
-              }
-            } else {
-              throw new Error(`Al insertar nueva nota: ${insErr.message}`);
-            }
-          }
-        }
+        if (scoresErr) throw new Error(`Al guardar notas de cotidiano: ${scoresErr.message}`);
       }
 
       // Éxito
@@ -335,12 +256,11 @@ export default function CotidianoGrid({
 
     } catch (e: any) {
       console.error("Error saving matrix", e);
-      alert(`Hubo un error al guardar: ${e.message || 'Revisa la consola.'}`);
+      alert(`Hubo un error al guardar cotidiano: ${e.message || 'Revisa la consola.'}`);
     } finally {
       setIsSaving(false);
     }
   };
-
 
   const addColumn = () => {
     setColumns([
