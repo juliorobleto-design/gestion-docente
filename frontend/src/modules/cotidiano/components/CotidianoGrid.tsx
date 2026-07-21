@@ -74,8 +74,9 @@ export default function CotidianoGrid({
     setConfigId(null);
     setColumns([]);
     setGridData({});
-    isInitialLoadRef.current = true; // Marcar como carga inicial
   }, [selectedGroupId, academicPeriod]);
+
+  const studentIdsString = students.map(s => s.id).join(',');
 
   // Load Data — con abort controller para cancelar cargas obsoletas
   useEffect(() => {
@@ -91,7 +92,6 @@ export default function CotidianoGrid({
         const periodToUse = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
 
         // 1. Cargar configuración de columnas
-        console.log(`[LOAD] group_id=${selectedGroupId}, period=${periodToUse}`);
         const { data: configData, error: configErr } = await supabase
           .from("cotidiano_columns_config")
           .select("id, columns_data")
@@ -100,8 +100,6 @@ export default function CotidianoGrid({
           .maybeSingle();
 
         if (cancelled) return; // Abortar si ya cambió el grupo
-
-        console.log("[LOAD] configData:", JSON.stringify(configData), "configErr:", configErr);
 
         if (configErr) {
           console.error("Error loading config:", configErr);
@@ -112,8 +110,6 @@ export default function CotidianoGrid({
           setConfigId(configData.id);
           setColumns(configData.columns_data as CotidianoCol[]);
         } else {
-          // No hay config para este grupo+periodo → default limpio
-          console.log("[LOAD] Sin config para este grupo. Default limpio.");
           setConfigId(null);
           setColumns([{ id: "c1", name: "Cotidiano #1", type: "pct" }]);
         }
@@ -140,27 +136,30 @@ export default function CotidianoGrid({
                 newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
               }
             });
+            console.log("Loaded GridData:", newGrid);
             setGridData(newGrid);
           }
         }
       } catch (e) {
-        console.error("Error loading matrix:", e);
+        console.error("Error loading matrix data", e);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     };
 
-    loadMatrixData().then(() => {
-      isInitialLoadRef.current = false;
-    });
+    if (selectedGroupId && academicPeriod) {
+      loadMatrixData();
+    }
 
-    return () => { cancelled = true; }; // Cleanup al desmontar o re-ejecutar
-  }, [selectedGroupId, academicPeriod, session, students.length]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGroupId, academicPeriod, studentIdsString]);
 
   // AUTO-SAVE: Guardar automáticamente 3 seg después del último cambio
   // Usa refs para evitar stale closures
   useEffect(() => {
-    if (isDirty && !isInitialLoadRef.current && columnsRef.current.length > 0) {
+    if (isDirty && columnsRef.current.length > 0) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
         handleSaveMatrix();
