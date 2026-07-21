@@ -352,10 +352,12 @@ export default function CotidianoGrid({
               alert(`Error actualizando notas para estudiante ${sid}: ${updErr.message}`);
             }
           } else {
-            // Intentar inserción de nuevo registro para este período
+            // Intentar inserción de nuevo registro para este período con ID manual para evadir la secuencia rota
+            const bypassId = Math.floor(Math.random() * 1000000000) + 1000000000;
+            const insertPayload = { ...payload, id: bypassId };
             const { error: insErr } = await supabase
               .from("daily_work_scores")
-              .insert(payload);
+              .insert(insertPayload);
 
             if (insErr) {
               console.warn(`[SAVE] Insert falló para estudiante ${sid} (${insErr.message}), ejecutando update de respaldo...`);
