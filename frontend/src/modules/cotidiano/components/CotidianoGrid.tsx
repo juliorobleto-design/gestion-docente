@@ -117,21 +117,23 @@ export default function CotidianoGrid({
         }
 
         // 2. Cargar celdas previas de los estudiantes para este periodo y grupo
-        const studentIds = students.map(s => s.id);
+        const studentIds = students.map(s => Number(s.id));
         if (studentIds.length > 0) {
-          const { data: scoresData } = await supabase
+          const { data: scoresData, error: scoresErr } = await supabase
             .from("daily_work_scores")
-            .select("student_id, matrix_cells")
+            .select("id, student_id, matrix_cells, score")
             .in("student_id", studentIds)
             .eq("period", academicPeriod);
           
           if (cancelled) return; // Abortar si ya cambió el grupo
 
-          if (scoresData) {
+          if (scoresErr) {
+            console.error("Error loading daily work scores:", scoresErr);
+          } else if (scoresData) {
             const newGrid: GridData = {};
             scoresData.forEach(row => {
               if (row.matrix_cells) {
-                const sid = row.student_id;
+                const sid = Number(row.student_id);
                 newGrid[sid] = { ...(newGrid[sid] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
                 newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
               }
@@ -247,14 +249,17 @@ export default function CotidianoGrid({
       if (students.length > 0) {
         const studentIds = students.map(s => Number(s.id));
         
-        // Obtener cuáles registros de estudiante ya existen para este periodo
-        const { data: existingScores } = await supabase
+        // Obtener cuáles registros de estudiante ya existen para este periodo (obteniendo id y student_id)
+        const { data: existingRows } = await supabase
           .from("daily_work_scores")
-          .select("student_id")
+          .select("id, student_id")
           .in("student_id", studentIds)
           .eq("period", academicPeriod);
 
-        const existingSet = new Set((existingScores || []).map(e => String(e.student_id)));
+        const existingMap = new Map<string, any>();
+        (existingRows || []).forEach(r => {
+          existingMap.set(String(r.student_id), r);
+        });
 
         await Promise.all(students.map(async (st) => {
           const sid = Number(st.id);
@@ -270,16 +275,23 @@ export default function CotidianoGrid({
             matrix_cells: cells
           };
 
-          const exists = existingSet.has(String(sid));
+          const existingRec = existingMap.get(String(sid));
 
-          if (exists) {
+          if (existingRec && existingRec.id) {
+            // Actualización directa por ID primario (100% garantizado)
             const { error: updErr } = await supabase
               .from("daily_work_scores")
               .update(payload)
-              .eq("student_id", sid)
-              .eq("period", academicPeriod);
+              .eq("id", existingRec.id);
             
-            if (updErr) throw new Error(`Al actualizar notas: ${updErr.message}`);
+            if (updErr) {
+              console.warn(`[SAVE] Error al actualizar por ID ${existingRec.id}, intentando por student_id:`, updErr.message);
+              await supabase
+                .from("daily_work_scores")
+                .update(payload)
+                .eq("student_id", sid)
+                .eq("period", academicPeriod);
+            }
           } else {
             const { error: insErr } = await supabase
               .from("daily_work_scores")
@@ -294,7 +306,7 @@ export default function CotidianoGrid({
                 .eq("period", academicPeriod);
 
               if (fallbackErr) {
-                throw new Error(`Al insertar notas: ${insErr.message}`);
+                console.error(`[SAVE] Fallback err para estudiante ${sid}:`, fallbackErr);
               }
             }
           }
