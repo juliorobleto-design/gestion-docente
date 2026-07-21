@@ -137,29 +137,39 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
 
       const { data, error } = await supabase
         .from("attendance_lessons")
-        .select("student_id, status")
-        .in("student_id", studentIds)
-        .eq("period", periodToLoad);
+        .select("student_id, status, period")
+        .in("student_id", studentIds);
 
       if (error) throw error;
 
       // Group by student: count total lessons and absences/tardies
       const attendance: Record<number, { total: number; present: number }> = {};
-      studentIds.forEach(id => { attendance[id] = { total: 0, present: 0 }; });
+      studentIds.forEach(id => { 
+        const sid = Number(id);
+        attendance[sid] = { total: 0, present: 0 }; 
+      });
 
       (data ?? []).forEach(row => {
-        const sid = row.student_id;
+        const sid = Number(row.student_id);
         if (!attendance[sid]) attendance[sid] = { total: 0, present: 0 };
+
+        // Match period if set; if period is null, include for active period
+        const rowPeriod = row.period ? String(row.period).toLowerCase().trim() : null;
+        if (rowPeriod && rowPeriod !== periodToLoad.toLowerCase()) {
+          return; // belongs to another period
+        }
+
         attendance[sid].total += 1;
-        // "P" = Presente, "presente" = Presente
-        const status = String(row.status).toUpperCase();
+        const status = String(row.status || "").toUpperCase().trim();
         if (status === "P" || status === "PRESENTE") {
           attendance[sid].present += 1;
         } else if (status === "T" || status === "TARDÍA" || status === "TARDIA") {
-          // Tardía counts as 0.5 attendance
           attendance[sid].present += 0.5;
         } else if (status === "J" || status === "JUSTIFICADA") {
-          // Justified absence counts as 1.0 (no penalty)
+          attendance[sid].present += 1;
+        } else if (status === "A" || status === "AUSENTE") {
+          // Ausente: 0
+        } else {
           attendance[sid].present += 1;
         }
       });
@@ -167,11 +177,12 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       // Convert to percentage (0-100) for each student
       const result: Record<number, number | null> = {};
       studentIds.forEach(id => {
-        const a = attendance[id];
-        if (a.total === 0) {
-          result[id] = null; // no data yet
+        const sid = Number(id);
+        const a = attendance[sid];
+        if (!a || a.total === 0) {
+          result[sid] = null; // no data yet
         } else {
-          result[id] = Math.round((a.present / a.total) * 100 * 100) / 100;
+          result[sid] = Math.round((a.present / a.total) * 100 * 100) / 100;
         }
       });
 

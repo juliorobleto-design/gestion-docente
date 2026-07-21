@@ -131,7 +131,9 @@ export default function CotidianoGrid({
             const newGrid: GridData = {};
             scoresData.forEach(row => {
               if (row.matrix_cells) {
-                newGrid[row.student_id] = { ...newGrid[row.student_id], ...(row.matrix_cells as { [colId: string]: CellData }) };
+                const sid = row.student_id;
+                newGrid[sid] = { ...(newGrid[sid] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
+                newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
               }
             });
             setGridData(newGrid);
@@ -166,15 +168,24 @@ export default function CotidianoGrid({
   }, [isDirty, gridData, columns]);
 
   const calculateTotal = (studentId: number) => {
-    const studentData = gridData[studentId] || {};
+    const studentData = gridData[studentId] || gridData[String(studentId)] || {};
     
     // Todas las columnas son porcentaje: promediamos y aplicamos al máximo del rubro
     let sumPct = 0;
     let validCount = 0;
     columns.forEach(col => {
-      const val = studentData[col.id]?.value;
-      if (typeof val === "number" && !isNaN(val)) {
-        sumPct += val;
+      let val = studentData[col.id]?.value;
+      if (typeof val === "string" && (val as string).includes("/")) {
+        const parts = (val as string).split("/");
+        const obtained = parseFloat(parts[0]);
+        const total = parseFloat(parts[1]);
+        if (!isNaN(obtained) && !isNaN(total) && total > 0) {
+          val = Math.round((obtained / total) * 100 * 100) / 100;
+        }
+      }
+      const numVal = typeof val === "number" ? val : parseFloat(val as any);
+      if (!isNaN(numVal)) {
+        sumPct += numVal;
         validCount++;
       }
     });
@@ -365,18 +376,36 @@ export default function CotidianoGrid({
     if (val === "") {
       setGridData(prev => ({
         ...prev,
-        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: "" } }
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: "" } },
+        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: "" } }
+      }));
+      setIsDirty(true);
+      return;
+    }
+    if (val.includes("/")) {
+      setGridData(prev => ({
+        ...prev,
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } },
+        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: val as any } }
       }));
       setIsDirty(true);
       return;
     }
     let num = parseFloat(val);
-    if (isNaN(num)) return;
-    // Punto 2: Validar rango 0-100
+    if (isNaN(num)) {
+      setGridData(prev => ({
+        ...prev,
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } },
+        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: val as any } }
+      }));
+      setIsDirty(true);
+      return;
+    }
     num = Math.min(100, Math.max(0, num));
     setGridData(prev => ({
       ...prev,
-      [studentId]: { ...(prev[studentId] || {}), [colId]: { value: num } }
+      [studentId]: { ...(prev[studentId] || {}), [colId]: { value: num } },
+      [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: num } }
     }));
     setIsDirty(true);
   };
@@ -394,10 +423,16 @@ export default function CotidianoGrid({
           [studentId]: {
             ...(prev[studentId] || {}),
             [colId]: { value: pct }
+          },
+          [String(studentId)]: {
+            ...(prev[String(studentId)] || {}),
+            [colId]: { value: pct }
           }
         }));
         setIsDirty(true);
       }
+    } else {
+      handleCellChange(studentId, colId, rawVal);
     }
   };
 
@@ -562,7 +597,7 @@ export default function CotidianoGrid({
 
                   {/* Input Cells */}
                   {columns.map((col, cIndex) => {
-                    const cellVal = gridData[student.id]?.[col.id]?.value ?? "";
+                    const cellVal = gridData[student.id]?.[col.id]?.value ?? gridData[String(student.id)]?.[col.id]?.value ?? "";
                     return (
                       <td key={col.id} style={{ borderBottom: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", padding: "8px", textAlign: "center" }}>
                         <div 
@@ -572,8 +607,9 @@ export default function CotidianoGrid({
                           <input 
                             type="text"
                             inputMode="decimal"
-                            defaultValue={cellVal}
-                            key={`${student.id}-${col.id}-${cellVal}`}
+                            value={cellVal}
+                            onChange={e => handleCellChange(student.id, col.id, e.target.value)}
+                            key={`${student.id}-${col.id}`}
                             data-row={sIndex}
                             data-col={cIndex}
                             onBlur={e => {
