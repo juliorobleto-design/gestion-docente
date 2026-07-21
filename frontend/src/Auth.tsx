@@ -45,6 +45,17 @@ export default function Auth({ externalError }: AuthProps) {
     return null; // Todo OK
   };
 
+  const formatAuthError = (err: any): string => {
+    const msg = err?.message || err?.error_description || '';
+    if (msg.includes('email rate limit exceeded') || msg.includes('rate_limit') || msg.includes('over_email_send_rate_limit')) {
+      return 'Has solicitado varios enlaces o correos en poco tiempo. Por seguridad, por favor espera 60 segundos antes de solicitar uno nuevo.';
+    }
+    if (msg.includes('Invalid login credentials')) {
+      return 'Contraseña o correo incorrectos. Si ingresaste antes con Enlace Mágico y no has asignado clave, haz clic en "Definir / Restablecer clave" abajo.';
+    }
+    return msg || 'Error al procesar el acceso.';
+  };
+
   // ═══════════ MAGIC LINK ═══════════
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +76,36 @@ export default function Auth({ externalError }: AuthProps) {
       if (error) throw error;
       setMessage({ type: 'success', text: '¡Enlace enviado! Revisa tu bandeja de entrada.' });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.error_description || error.message || 'Error al procesar el acceso.' });
+      setMessage({ type: 'error', text: formatAuthError(error) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ═══════════ RESET / SET PASSWORD ═══════════
+  const handleResetPassword = async () => {
+    setMessage(null);
+    if (!email.trim() || !validateEmail(email)) {
+      setMessage({ type: 'error', text: 'Por favor, ingresa un correo electrónico válido para enviar las instrucciones de contraseña.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const validationError = await validateAndCheck();
+      if (validationError) {
+        setMessage({ type: 'error', text: validationError });
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) throw error;
+      setMessage({ type: 'success', text: 'Se ha enviado un enlace a tu correo para definir o restablecer tu contraseña.' });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: formatAuthError(error) });
     } finally {
       setLoading(false);
     }
@@ -104,26 +144,28 @@ export default function Auth({ externalError }: AuthProps) {
 
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
-          // Puede ser que el usuario no tiene contraseña aún, intentar signup
-          const { error: signUpError } = await supabase.auth.signUp({
+          // Intentar crear cuenta solo si es un usuario totalmente nuevo
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: normalizedEmail,
             password: password,
           });
 
           if (signUpError) {
-            if (signUpError.message.includes('already registered')) {
-              setMessage({ type: 'error', text: 'Contraseña incorrecta. Si olvidaste tu contraseña, usa el Enlace Mágico para ingresar.' });
-            } else {
-              throw signUpError;
-            }
+            setMessage({ type: 'error', text: 'Contraseña incorrecta. Si olvidaste tu contraseña o entraste antes con Enlace Mágico, usa la opción abajo para definir tu clave.' });
+          } else if (signUpData?.user && signUpData.user.identities && signUpData.user.identities.length === 0) {
+            // Usuario ya existía en Supabase Auth sin contraseña
+            setMessage({ 
+              type: 'error', 
+              text: 'Tu cuenta fue registrada previamente con Enlace Mágico. Haz clic en "Definir / Restablecer clave" para enviarte el acceso a tu correo.' 
+            });
           } else {
-            // Signup exitoso, intentar login de nuevo
+            // Intento de re-login tras registro exitoso
             const { error: retryError } = await supabase.auth.signInWithPassword({
               email: normalizedEmail,
               password: password,
             });
             if (retryError) {
-              setMessage({ type: 'success', text: '¡Cuenta creada! Revisa tu correo para confirmar y luego podrás ingresar con tu contraseña.' });
+              setMessage({ type: 'success', text: '¡Cuenta creada con éxito! Ya puedes ingresar con tu contraseña.' });
             } else {
               setMessage({ type: 'success', text: '¡Bienvenido!' });
             }
@@ -135,7 +177,7 @@ export default function Auth({ externalError }: AuthProps) {
         setMessage({ type: 'success', text: '¡Acceso exitoso!' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Error al procesar el acceso.' });
+      setMessage({ type: 'error', text: formatAuthError(error) });
     } finally {
       setLoading(false);
     }
@@ -292,10 +334,28 @@ export default function Auth({ externalError }: AuthProps) {
 
           {/* Hint para contraseña */}
           {authMode === 'password' && (
-            <p className="text-[11px] text-center text-[#94a3b8] font-medium leading-relaxed">
-              Si es tu primera vez, se creará una cuenta automáticamente.
-              <br />Si olvidaste tu contraseña, usa <button type="button" onClick={() => setAuthMode('magiclink')} className="text-blue-500 font-bold hover:underline">Enlace Mágico</button>.
-            </p>
+            <div className="text-[12px] text-center text-[#64748b] font-medium leading-relaxed space-y-2 pt-2 border-t border-slate-100">
+              <p>
+                ¿No tienes contraseña o entraste antes con Enlace Mágico?{' '}
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  className="text-blue-600 font-bold hover:underline underline-offset-2"
+                >
+                  Definir / Restablecer clave
+                </button>
+              </p>
+              <p className="text-[11px] text-[#94a3b8]">
+                O ingresa directamente con{' '}
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('magiclink'); setMessage(null); }}
+                  className="text-blue-500 font-bold hover:underline"
+                >
+                  Enlace Mágico
+                </button>.
+              </p>
+            </div>
           )}
 
           {isLocalhost && (

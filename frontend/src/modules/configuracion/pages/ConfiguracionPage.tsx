@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from "react";
-import { Save, Plus, Trash2, Building2, User, UploadCloud, Percent, AlertCircle, Check, Settings, Database, FileOutput, FileInput, ImagePlus, X, Copy, Shield, ChevronRight } from "lucide-react";
+import { Save, Plus, Trash2, Building2, User, UploadCloud, Percent, AlertCircle, Check, Settings, Database, FileOutput, FileInput, ImagePlus, X, Copy, Shield, ChevronRight, KeyRound, Lock } from "lucide-react";
+import { supabase } from "../../../supabaseClient";
 
 import { showAuthError } from "../../../utils/authError";
 
@@ -58,6 +59,30 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
   const [copySuccess, setCopySuccess] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+
+  // Password update state
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword.trim() || newPassword.length < 6) {
+      setPasswordMsg({ type: "error", text: "La contraseña debe tener al menos 6 caracteres." });
+      return;
+    }
+    setPasswordLoading(true);
+    setPasswordMsg(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setPasswordMsg({ type: "success", text: "¡Contraseña guardada con éxito! Ya puedes usarla para ingresar." });
+      setNewPassword("");
+    } catch (err: any) {
+      setPasswordMsg({ type: "error", text: err.message || "Error al actualizar contraseña." });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   const [localRubrics, setLocalRubrics] = useState<EvaluationRubric[]>([]);
   const [copyMinGrade, setCopyMinGrade] = useState(true);
@@ -437,6 +462,74 @@ export default function ConfiguracionPage({ appSettings, setAppSettings, groups,
                      onBlur={e => { e.target.style.borderColor = "#cbd5e1"; e.target.style.background = "#f8fafc"; }}
                    />
                 </div>
+             </div>
+          </div>
+
+          {/* Card: Seguridad y Contraseña */}
+          <div style={{ background: "#fff", borderRadius: "16px", padding: "24px", boxShadow: "0 4px 15px rgba(0,0,0,0.03)", border: "1px solid #e2e8f0" }}>
+             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", color: "#2563eb" }}>
+               <KeyRound size={18} />
+               <h3 style={{ fontSize: "14px", fontWeight: 700, margin: 0, color: "#334155" }}>Seguridad y Contraseña</h3>
+             </div>
+             
+             <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 16px 0", lineHeight: 1.5 }}>
+               Establece o cambia tu contraseña para ingresar directamente sin depender del Enlace Mágico por correo.
+             </p>
+
+             {passwordMsg && (
+               <div style={{ 
+                 marginBottom: "16px", 
+                 padding: "10px 14px", 
+                 borderRadius: "10px", 
+                 fontSize: "12px", 
+                 fontWeight: 600,
+                 background: passwordMsg.type === "success" ? "#f0fdf4" : "#fef2f2",
+                 color: passwordMsg.type === "success" ? "#166534" : "#991b1b",
+                 border: `1px solid ${passwordMsg.type === "success" ? "#bbf7d0" : "#fecaca"}`
+               }}>
+                 {passwordMsg.text}
+               </div>
+             )}
+
+             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: 800, color: "#94a3b8", marginBottom: "6px", textTransform: "uppercase" }}>Nueva Contraseña (mínimo 6 caracteres)</label>
+                  <input 
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #cbd5e1", fontSize: "14px", outline: "none", color: "#0f172a", fontWeight: 500, background: "#f8fafc", transition: "all 0.2s" }}
+                    onFocus={e => { e.target.style.borderColor = "#2563eb"; e.target.style.background = "#fff"; }}
+                    onBlur={e => { e.target.style.borderColor = "#cbd5e1"; e.target.style.background = "#f8fafc"; }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleUpdatePassword}
+                  disabled={passwordLoading}
+                  style={{
+                    width: "100%",
+                    padding: "10px 16px",
+                    borderRadius: "10px",
+                    background: "#2563eb",
+                    color: "#fff",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    border: "none",
+                    cursor: passwordLoading ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    opacity: passwordLoading ? 0.7 : 1,
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <Lock size={14} />
+                  {passwordLoading ? "Guardando..." : "Guardar Contraseña"}
+                </button>
              </div>
           </div>
 
