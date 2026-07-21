@@ -22,7 +22,7 @@ async function checkData() {
      const scoresRes = await fetch(scoresUrl);
      const scoresData = await scoresRes.json();
      console.log("\n=== SCORES TABLE ===");
-     console.log("Total entries:", scoresData.length || scoresData.message);
+     console.log(JSON.stringify(scoresData, null, 2));
   } catch(e) {
      console.log(e);
   }

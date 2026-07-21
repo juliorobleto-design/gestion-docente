@@ -130,12 +130,20 @@ export default function CotidianoGrid({
           } else if (scoresData) {
             const newGrid: GridData = {};
             scoresData.forEach(row => {
-              if (row.matrix_cells) {
-                const sid = Number(row.student_id);
-                newGrid[sid] = { ...(newGrid[sid] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
-                newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(row.matrix_cells as { [colId: string]: CellData }) };
+            if (row.matrix_cells) {
+              let cellsObj = row.matrix_cells;
+              if (typeof cellsObj === 'string') {
+                try {
+                  cellsObj = JSON.parse(cellsObj);
+                } catch (e) {
+                  cellsObj = {};
+                }
               }
-            });
+              const sid = Number(row.student_id);
+              newGrid[sid] = { ...(newGrid[sid] || {}), ...(cellsObj as { [colId: string]: CellData }) };
+              newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(cellsObj as { [colId: string]: CellData }) };
+            }
+          });
             console.log("Loaded GridData:", newGrid);
             setGridData(newGrid);
           }
@@ -315,7 +323,7 @@ export default function CotidianoGrid({
           }
         });
 
-        await Promise.all(students.map(async (st) => {
+        for (const st of students) {
           const sid = Number(st.id);
           const rowTotal = calculateTotal(sid);
           const cells = gridData[st.id] || gridData[String(st.id)] || gridData[sid] || {};
@@ -341,6 +349,7 @@ export default function CotidianoGrid({
             
             if (updErr) {
               console.warn(`[SAVE] Error actualizando por ID ${exactId}:`, updErr.message);
+              alert(`Error actualizando notas para estudiante ${sid}: ${updErr.message}`);
             }
           } else {
             // Intentar inserción de nuevo registro para este período
@@ -360,16 +369,14 @@ export default function CotidianoGrid({
 
                 if (fbErr) {
                   console.error(`[SAVE] Fallback por ID ${targetId} falló:`, fbErr);
+                  alert(`Error guardando (fallback) estudiante ${sid}: ${fbErr.message}`);
                 }
               } else {
-                await supabase
-                  .from("daily_work_scores")
-                  .update(payload)
-                  .eq("student_id", sid);
+                alert(`Fallo crítico al guardar estudiante ${sid}: ${insErr.message}`);
               }
             }
           }
-        }));
+        }
       }
 
       // Éxito
