@@ -119,7 +119,7 @@ export default function CotidianoGrid({
         if (studentIds.length > 0) {
           const { data: scoresData, error: scoresErr } = await supabase
             .from("daily_work_scores")
-            .select("id, student_id, matrix_cells, score")
+            .select("student_id, matrix_cells, score")
             .in("student_id", studentIds)
             .eq("period", periodToUse);
           
@@ -306,20 +306,20 @@ export default function CotidianoGrid({
       if (students.length > 0) {
         const studentIds = students.map(s => Number(s.id));
         
-        // Obtener todos los registros de estos estudiantes (tanto de este periodo como generales)
+        // Obtener todos los registros de estos estudiantes
         const { data: existingRows } = await supabase
           .from("daily_work_scores")
-          .select("id, student_id, period")
+          .select("student_id, period")
           .in("student_id", studentIds);
 
-        const exactMap = new Map<string, number | string>();
-        const anyMap = new Map<string, number | string>();
+        const exactMap = new Set<string>();
+        const anyMap = new Set<string>();
 
         (existingRows || []).forEach(r => {
           const sid = String(r.student_id);
-          anyMap.set(sid, r.id);
+          anyMap.add(sid);
           if (r.period === periodToUse) {
-            exactMap.set(sid, r.id);
+            exactMap.add(sid);
           }
         });
 
@@ -337,40 +337,36 @@ export default function CotidianoGrid({
             matrix_cells: cells
           };
 
-          const exactId = exactMap.get(String(sid));
-          const fallbackAnyId = anyMap.get(String(sid));
+          const exactExists = exactMap.has(String(sid));
+          const anyExists = anyMap.has(String(sid));
 
-          if (exactId) {
-            // Actualización directa por ID exacto de período (100% confiable)
+          if (exactExists) {
             const { error: updErr } = await supabase
               .from("daily_work_scores")
               .update(payload)
-              .eq("id", exactId);
+              .eq("student_id", sid)
+              .eq("period", periodToUse);
             
             if (updErr) {
-              console.warn(`[SAVE] Error actualizando por ID ${exactId}:`, updErr.message);
+              console.warn(`[SAVE] Error actualizando estudiante ${sid}:`, updErr.message);
               alert(`Error actualizando notas para estudiante ${sid}: ${updErr.message}`);
             }
           } else {
-            // Intentar inserción de nuevo registro para este período con ID manual para evadir la secuencia rota
-            const bypassId = Math.floor(Math.random() * 1000000000) + 1000000000;
-            const insertPayload = { ...payload, id: bypassId };
             const { error: insErr } = await supabase
               .from("daily_work_scores")
-              .insert(insertPayload);
+              .insert(payload);
 
             if (insErr) {
               console.warn(`[SAVE] Insert falló para estudiante ${sid} (${insErr.message}), ejecutando update de respaldo...`);
-              // Si la tabla no permite múltiples filas por estudiante, actualizar el registro existente del estudiante cambiando el período y celdas
-              const targetId = fallbackAnyId;
-              if (targetId) {
+              if (anyExists) {
+                // Actualizamos el registro viejo existente de este estudiante (probablemente guardado sin periodo correcto)
                 const { error: fbErr } = await supabase
                   .from("daily_work_scores")
                   .update(payload)
-                  .eq("id", targetId);
+                  .eq("student_id", sid);
 
                 if (fbErr) {
-                  console.error(`[SAVE] Fallback por ID ${targetId} falló:`, fbErr);
+                  console.error(`[SAVE] Fallback falló:`, fbErr);
                   alert(`Error guardando (fallback) estudiante ${sid}: ${fbErr.message}`);
                 }
               } else {
