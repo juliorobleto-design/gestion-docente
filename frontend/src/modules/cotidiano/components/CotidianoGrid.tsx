@@ -119,9 +119,9 @@ export default function CotidianoGrid({
         if (studentIds.length > 0) {
           const { data: scoresData, error: scoresErr } = await supabase
             .from("daily_work_scores")
-            .select("student_id, matrix_cells, score")
+            .select("student_id, period, matrix_cells, score")
             .in("student_id", studentIds)
-            .eq("period", periodToUse);
+            .in("period", [periodToUse, "annual"]);
           
           if (cancelled) return; // Abortar si ya cambió el grupo
 
@@ -129,21 +129,32 @@ export default function CotidianoGrid({
             console.error("Error loading daily work scores:", scoresErr);
           } else if (scoresData) {
             const newGrid: GridData = {};
+            
+            // Ordenar para que 'annual' se procese primero, y luego 'periodToUse' pueda sobreescribir
+            scoresData.sort((a, b) => a.period === 'annual' ? -1 : 1);
+
             scoresData.forEach(row => {
-            if (row.matrix_cells) {
-              let cellsObj = row.matrix_cells;
-              if (typeof cellsObj === 'string') {
-                try {
-                  cellsObj = JSON.parse(cellsObj);
-                } catch (e) {
-                  cellsObj = {};
+              if (row.matrix_cells) {
+                let cellsObj = row.matrix_cells;
+                if (typeof cellsObj === 'string') {
+                  try {
+                    cellsObj = JSON.parse(cellsObj);
+                  } catch (e) {
+                    cellsObj = {};
+                  }
+                }
+                const sid = Number(row.student_id);
+                const hasRealData = Object.keys(cellsObj).length > 0;
+                
+                const existingData = newGrid[sid];
+                const existingHasData = existingData && Object.keys(existingData).length > 0;
+                
+                if (!existingData || hasRealData || (!existingHasData && row.period === periodToUse)) {
+                  newGrid[sid] = { ...(existingData || {}), ...(cellsObj as { [colId: string]: CellData }) };
+                  newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(cellsObj as { [colId: string]: CellData }) };
                 }
               }
-              const sid = Number(row.student_id);
-              newGrid[sid] = { ...(newGrid[sid] || {}), ...(cellsObj as { [colId: string]: CellData }) };
-              newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(cellsObj as { [colId: string]: CellData }) };
-            }
-          });
+            });
             console.log("Loaded GridData:", newGrid);
             setGridData(newGrid);
           }
