@@ -254,7 +254,7 @@ export default function CotidianoGrid({
         .in("student_id", studentIds)
         .eq("period", academicPeriod);
       
-      const existingSet = new Set(existing?.map(e => e.student_id));
+      const existingSet = new Set(existing?.map(e => String(e.student_id)));
 
       const scoresPayload = students.map(st => {
         const rowTotal = calculateTotal(st.id);
@@ -267,7 +267,7 @@ export default function CotidianoGrid({
           total_points: globalPercentageTarget,
           owner_id: session.user.id,
           matrix_cells: cells,
-          _exists: existingSet.has(st.id) // Bandera interna
+          _exists: existingSet.has(String(st.id)) // Bandera interna
         };
 
         return payload;
@@ -304,9 +304,9 @@ export default function CotidianoGrid({
               console.warn(`Fallback UPDATE para registro de estudiante ${record.student_id} tras colisión.`);
               const { error: fallbackErr } = await supabase
                 .from("daily_work_scores")
-                .update(record)
-                .eq("student_id", record.student_id)
-                .eq("period", record.period);
+                .update(insertData)
+                .eq("student_id", insertData.student_id)
+                .eq("period", insertData.period);
                 
               if (fallbackErr) {
                 throw new Error(`InsErr: ${insErr.message} | FallbackErr: ${fallbackErr.message}`);
