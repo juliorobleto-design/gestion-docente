@@ -174,9 +174,18 @@ export default function CotidianoGrid({
   const getCellValue = (studentId: number, col: CotidianoCol): any => {
     const studentData = gridData[studentId] || gridData[String(studentId)] || {};
     
+    const extractVal = (cell: any) => {
+      if (cell === undefined || cell === null) return "";
+      if (typeof cell === "object" && cell.value !== undefined && cell.value !== null) {
+        return cell.value;
+      }
+      return cell; // Primitive fallback
+    };
+
     // 1. Buscar por ID exacto
-    if (studentData[col.id]?.value !== undefined && studentData[col.id]?.value !== null) {
-      return studentData[col.id].value;
+    const exactCell = studentData[col.id];
+    if (exactCell !== undefined && exactCell !== null) {
+      return extractVal(exactCell);
     }
     
     // 2. Fallback por orden/índice (en caso de que las columnas se hayan recreado con otros IDs)
@@ -193,8 +202,9 @@ export default function CotidianoGrid({
     const colIndex = columns.findIndex(c => c.id === col.id);
     if (colIndex !== -1 && sortedKeys[colIndex] !== undefined) {
       const fallbackKey = sortedKeys[colIndex];
-      if (studentData[fallbackKey]?.value !== undefined && studentData[fallbackKey]?.value !== null) {
-        return studentData[fallbackKey].value;
+      const fallbackCell = studentData[fallbackKey];
+      if (fallbackCell !== undefined && fallbackCell !== null) {
+        return extractVal(fallbackCell);
       }
     }
 
