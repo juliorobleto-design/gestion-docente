@@ -171,40 +171,48 @@ export default function CotidianoGrid({
   }, [isDirty, gridData, columns]);
 
   const getCellValue = (studentId: number, col: CotidianoCol): any => {
-    const studentData = gridData[studentId] || gridData[String(studentId)] || {};
-    
+    let studentData = gridData[studentId] || gridData[String(studentId)];
+    if (!studentData) return "";
+
+    // Si por alguna razón los datos vienen stringificados desde la DB
+    if (typeof studentData === 'string') {
+      try { studentData = JSON.parse(studentData); } catch (e) { return ""; }
+    }
+
     const extractVal = (cell: any) => {
       if (cell === undefined || cell === null) return "";
-      if (typeof cell === "object" && cell.value !== undefined && cell.value !== null) {
-        return cell.value;
+      if (typeof cell === "object") {
+        if (cell.value !== undefined && cell.value !== null) {
+          return cell.value;
+        }
+        return ""; // Si es un objeto vacío {}, no devolverlo para evitar crash de React
       }
-      return cell; // Primitive fallback
+      return cell; // Fallback para primitivos (ej. si matrix_cells se guardó como { c1: 100 })
     };
 
-    // 1. Buscar por ID exacto
-    const exactCell = studentData[col.id];
-    if (exactCell !== undefined && exactCell !== null) {
-      return extractVal(exactCell);
+    // 1. Buscar por ID exacto (Caso normal y feliz)
+    if (studentData[col.id] !== undefined && studentData[col.id] !== null) {
+      return extractVal(studentData[col.id]);
     }
+
+    // 2. Fallback heurístico: emparejar por índice (cuando cambian los IDs de columnas)
+    // Extraemos todas las llaves reales (ignorando métodos del prototipo)
+    const allKeys = Object.keys(studentData).filter(k => studentData[k] !== undefined && studentData[k] !== null);
     
-    // 2. Fallback por orden/índice (en caso de que las columnas se hayan recreado con otros IDs)
-    const cellKeys = Object.keys(studentData).filter(k => k.startsWith('c'));
+    // Filtramos solo las llaves que probablemente sean columnas (ej. 'c1', 'c1712030...')
+    const cellKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith('c'));
+
+    // Ordenamos las llaves alfanuméricamente (extraemos números si los hay)
     const sortedKeys = cellKeys.sort((a, b) => {
-      const numA = parseInt(a.replace('c', ''));
-      const numB = parseInt(b.replace('c', ''));
-      if (isNaN(numA) || isNaN(numB)) {
-        return a.localeCompare(b);
-      }
-      return numA - numB;
+      const numA = parseInt(a.replace(/\D/g, '')) || 0;
+      const numB = parseInt(b.replace(/\D/g, '')) || 0;
+      if (numA && numB) return numA - numB;
+      return a.localeCompare(b);
     });
 
     const colIndex = columns.findIndex(c => c.id === col.id);
-    if (colIndex !== -1 && sortedKeys[colIndex] !== undefined) {
-      const fallbackKey = sortedKeys[colIndex];
-      const fallbackCell = studentData[fallbackKey];
-      if (fallbackCell !== undefined && fallbackCell !== null) {
-        return extractVal(fallbackCell);
-      }
+    if (colIndex >= 0 && colIndex < sortedKeys.length) {
+      return extractVal(studentData[sortedKeys[colIndex]]);
     }
 
     return "";
