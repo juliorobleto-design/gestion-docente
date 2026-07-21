@@ -171,14 +171,42 @@ export default function CotidianoGrid({
     };
   }, [isDirty, gridData, columns]);
 
-  const calculateTotal = (studentId: number) => {
+  const getCellValue = (studentId: number, col: CotidianoCol): any => {
     const studentData = gridData[studentId] || gridData[String(studentId)] || {};
     
+    // 1. Buscar por ID exacto
+    if (studentData[col.id]?.value !== undefined && studentData[col.id]?.value !== null) {
+      return studentData[col.id].value;
+    }
+    
+    // 2. Fallback por orden/índice (en caso de que las columnas se hayan recreado con otros IDs)
+    const cellKeys = Object.keys(studentData).filter(k => k.startsWith('c'));
+    const sortedKeys = cellKeys.sort((a, b) => {
+      const numA = parseInt(a.replace('c', ''));
+      const numB = parseInt(b.replace('c', ''));
+      if (isNaN(numA) || isNaN(numB)) {
+        return a.localeCompare(b);
+      }
+      return numA - numB;
+    });
+
+    const colIndex = columns.findIndex(c => c.id === col.id);
+    if (colIndex !== -1 && sortedKeys[colIndex] !== undefined) {
+      const fallbackKey = sortedKeys[colIndex];
+      if (studentData[fallbackKey]?.value !== undefined && studentData[fallbackKey]?.value !== null) {
+        return studentData[fallbackKey].value;
+      }
+    }
+
+    return "";
+  };
+
+  const calculateTotal = (studentId: number) => {
     // Todas las columnas son porcentaje: promediamos y aplicamos al máximo del rubro
     let sumPct = 0;
     let validCount = 0;
     columns.forEach(col => {
-      let val = studentData[col.id]?.value;
+      let val = getCellValue(studentId, col);
       if (typeof val === "string" && (val as string).includes("/")) {
         const parts = (val as string).split("/");
         const obtained = parseFloat(parts[0]);
@@ -594,7 +622,7 @@ export default function CotidianoGrid({
 
                   {/* Input Cells */}
                   {columns.map((col, cIndex) => {
-                    const cellVal = gridData[student.id]?.[col.id]?.value ?? gridData[String(student.id)]?.[col.id]?.value ?? "";
+                    const cellVal = getCellValue(student.id, col);
                     return (
                       <td key={col.id} style={{ borderBottom: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0", padding: "8px", textAlign: "center" }}>
                         <div 
