@@ -210,7 +210,14 @@ export default function CotidianoGrid({
     
     setIsSaving(true);
     try {
-      // 1. Guardado Atómico de Columnas de Configuración
+      // 1. Guardado de Configuración de Columnas
+      const { data: existingCfg } = await supabase
+        .from("cotidiano_columns_config")
+        .select("id")
+        .eq("group_id", Number(selectedGroupId))
+        .eq("period", academicPeriod)
+        .maybeSingle();
+
       const cfgPayload = {
         group_id: Number(selectedGroupId),
         period: academicPeriod,
@@ -218,36 +225,80 @@ export default function CotidianoGrid({
         columns_data: columns
       };
 
-      const { data: cfgData, error: cfgErr } = await supabase
-        .from("cotidiano_columns_config")
-        .upsert(cfgPayload, { onConflict: "group_id,period" })
-        .select("id")
-        .maybeSingle();
+      const targetCfgId = existingCfg?.id || configId;
 
-      if (cfgErr) throw new Error(`Al guardar configuración de cotidiano: ${cfgErr.message}`);
-      if (cfgData?.id) setConfigId(cfgData.id);
+      if (targetCfgId) {
+        const { error: cfgUpdErr } = await supabase
+          .from("cotidiano_columns_config")
+          .update({ columns_data: columns, owner_id: session.user.id })
+          .eq("id", targetCfgId);
+        if (cfgUpdErr) throw new Error(`Al actualizar configuración: ${cfgUpdErr.message}`);
+      } else {
+        const { data: newCfg, error: cfgInsErr } = await supabase
+          .from("cotidiano_columns_config")
+          .insert(cfgPayload)
+          .select("id")
+          .maybeSingle();
+        if (cfgInsErr) throw new Error(`Al guardar configuración: ${cfgInsErr.message}`);
+        if (newCfg?.id) setConfigId(newCfg.id);
+      }
 
-      // 2. Guardado Atómico de Notas de Estudiantes
+      // 2. Guardado de Notas de Estudiantes
       if (students.length > 0) {
-        const scoresPayload = students.map(st => {
-          const rowTotal = calculateTotal(st.id);
-          const cells = gridData[st.id] || gridData[String(st.id)] || gridData[Number(st.id)] || {};
+        const studentIds = students.map(s => Number(s.id));
+        
+        // Obtener cuáles registros de estudiante ya existen para este periodo
+        const { data: existingScores } = await supabase
+          .from("daily_work_scores")
+          .select("student_id")
+          .in("student_id", studentIds)
+          .eq("period", academicPeriod);
+
+        const existingSet = new Set((existingScores || []).map(e => String(e.student_id)));
+
+        await Promise.all(students.map(async (st) => {
+          const sid = Number(st.id);
+          const rowTotal = calculateTotal(sid);
+          const cells = gridData[st.id] || gridData[String(st.id)] || gridData[sid] || {};
           
-          return {
-            student_id: Number(st.id),
+          const payload = {
+            student_id: sid,
             period: academicPeriod,
             score: rowTotal,
             total_points: globalPercentageTarget,
             owner_id: session.user.id,
             matrix_cells: cells
           };
-        });
 
-        const { error: scoresErr } = await supabase
-          .from("daily_work_scores")
-          .upsert(scoresPayload, { onConflict: "student_id,period" });
+          const exists = existingSet.has(String(sid));
 
-        if (scoresErr) throw new Error(`Al guardar notas de cotidiano: ${scoresErr.message}`);
+          if (exists) {
+            const { error: updErr } = await supabase
+              .from("daily_work_scores")
+              .update(payload)
+              .eq("student_id", sid)
+              .eq("period", academicPeriod);
+            
+            if (updErr) throw new Error(`Al actualizar notas: ${updErr.message}`);
+          } else {
+            const { error: insErr } = await supabase
+              .from("daily_work_scores")
+              .insert(payload);
+
+            if (insErr) {
+              // Fallback si colisiona por duplicado
+              const { error: fallbackErr } = await supabase
+                .from("daily_work_scores")
+                .update(payload)
+                .eq("student_id", sid)
+                .eq("period", academicPeriod);
+
+              if (fallbackErr) {
+                throw new Error(`Al insertar notas: ${insErr.message}`);
+              }
+            }
+          }
+        }));
       }
 
       // Éxito
