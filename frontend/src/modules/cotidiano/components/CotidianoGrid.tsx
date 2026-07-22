@@ -359,6 +359,10 @@ export default function CotidianoGrid({
               .eq("period", periodToUse);
             
             if (updErr) {
+              if (updErr.message === 'Failed to fetch' || updErr.message.includes('fetch')) {
+                alert("Se interrumpió la conexión (¿cambiaste de pestaña muy rápido o se cortó el internet?). Por favor, quédate en esta pantalla hasta que el botón deje de decir 'Guardando...'.");
+                break; // Stop loop to avoid multiple alerts
+              }
               console.warn(`[SAVE] Error actualizando estudiante ${sid}:`, updErr.message);
               alert(`Error actualizando notas para estudiante ${sid}: ${updErr.message}`);
             }
@@ -368,6 +372,10 @@ export default function CotidianoGrid({
               .insert(payload);
 
             if (insErr) {
+              if (insErr.message === 'Failed to fetch' || insErr.message.includes('fetch')) {
+                alert("Se interrumpió la conexión al guardar. Por favor, no cambies de pestaña hasta que el proceso termine.");
+                break;
+              }
               console.warn(`[SAVE] Insert falló para estudiante ${sid} (${insErr.message}), ejecutando update de respaldo...`);
               if (anyExists) {
                 // Actualizamos el registro viejo existente de este estudiante (probablemente guardado sin periodo correcto)
@@ -377,6 +385,10 @@ export default function CotidianoGrid({
                   .eq("student_id", sid);
 
                 if (fbErr) {
+                  if (fbErr.message === 'Failed to fetch' || fbErr.message.includes('fetch')) {
+                    alert("Se interrumpió la conexión al actualizar. Por favor, no cambies de pestaña hasta que termine.");
+                    break;
+                  }
                   console.error(`[SAVE] Fallback falló:`, fbErr);
                   alert(`Error guardando (fallback) estudiante ${sid}: ${fbErr.message}`);
                 }
