@@ -99,7 +99,8 @@ export default function ReportesPage({
         Number(selectedGroup),
         currentGroupName,
         academicPeriod,
-        allStudents
+        allStudents,
+        evaluationRubrics
       );
       if (!res.success) {
         alert(res.message);

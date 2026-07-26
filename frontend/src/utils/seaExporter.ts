@@ -11,11 +11,23 @@ interface Student {
   cedula?: string;
 }
 
+function rubricToColumn(name: string): string | null {
+  const n = name.toUpperCase().trim();
+  if (n.includes("TAREA") || n.includes("PROYECTO")) return "projects";
+  if (n.includes("PRUEBA 2") || n === "PRUEBA2") return "test2";
+  if (n.includes("PRUEBA 1") || n === "PRUEBA1" || n.includes("PRUEBA")) return "test1";
+  if (n.includes("PORTAFOLIO") || n.includes("PORTFOLIO")) return "portfolio";
+  if (n.includes("DEMOSTRACI") || n.includes("DEMONSTR")) return "demonstration";
+  if (n.includes("SUMATIVO") || n.includes("INSTRUMENTO")) return "sumative_instrument";
+  return null;
+}
+
 export async function exportToSEACSV(
   groupId: number,
   groupName: string,
   academicPeriod: 'semester1' | 'semester2' | 'annual',
-  allStudents: Student[]
+  allStudents: Student[],
+  evaluationRubrics: { id: string; name: string; percentage: number }[] = []
 ): Promise<{ success: boolean; message: string }> {
   try {
     const studentsInGroup = allStudents
@@ -28,6 +40,10 @@ export async function exportToSEACSV(
 
     const studentIds = studentsInGroup.map(s => s.id);
     const periodToLoad = academicPeriod === 'annual' ? 'semester1' : academicPeriod;
+
+    // Determinar peso de Asistencia configurado en rúbricas (por defecto 5%)
+    const attRubric = evaluationRubrics.find(r => r.name && r.name.toUpperCase().trim().includes("ASISTENCIA"));
+    const attWeight = attRubric ? (Number(attRubric.percentage) || 5) : 5;
 
     // 1. Obtener asistencia de la base de datos
     const { data: attData, error: attError } = await supabase
@@ -56,7 +72,7 @@ export async function exportToSEACSV(
     const attPoints: Record<number, number> = {};
     studentIds.forEach(id => {
       const a = attCounts[id];
-      attPoints[id] = a && a.total > 0 ? Math.round((a.present / a.total) * 5 * 10) / 10 : 0;
+      attPoints[id] = a && a.total > 0 ? Math.round((a.present / a.total) * attWeight * 10) / 10 : 0;
     });
 
     // 2. Obtener trabajo cotidiano de la base de datos
@@ -79,7 +95,7 @@ export async function exportToSEACSV(
     // 3. Obtener notas de la tabla grades
     const { data: gradesData, error: gradesError } = await supabase
       .from("grades")
-      .select("student_id, projects, test1, test2")
+      .select("*")
       .in("student_id", studentIds)
       .eq("period", periodToLoad);
 
@@ -87,23 +103,58 @@ export async function exportToSEACSV(
 
     const gradesMap: Record<number, { projects: number; test: number }> = {};
     studentIds.forEach(id => { gradesMap[id] = { projects: 0, test: 0 }; });
+    
+    const activeRubrics = evaluationRubrics.filter(r => r.name && r.name.trim() !== "");
+
     (gradesData || []).forEach(row => {
       const sid = row.student_id;
-      const projectsScore = row.projects != null ? Math.round(row.projects) : 0;
-      
-      // Promediar pruebas si hay ambas, o tomar la existente
-      let testScore = 0;
-      if (row.test1 != null && row.test2 != null) {
-        testScore = Math.round((row.test1 + row.test2) / 2);
-      } else if (row.test1 != null) {
-        testScore = Math.round(row.test1);
-      } else if (row.test2 != null) {
-        testScore = Math.round(row.test2);
+      let projectsTotal = 0;
+      let testTotal = 0;
+      let matchedAny = false;
+
+      activeRubrics.forEach(rubric => {
+        const nameUp = rubric.name.toUpperCase().trim();
+        if (nameUp.includes("ASISTENCIA") || nameUp.includes("COTIDIANO")) {
+          return; // Saltamos las rúbricas automáticas
+        }
+
+        const colName = rubricToColumn(rubric.name);
+        if (colName && row[colName] != null && row[colName] !== undefined) {
+          matchedAny = true;
+          const rawScore = Number(row[colName]); // Nota de 0 a 100 en BD
+          const weight = Number(rubric.percentage) || 0;
+          
+          // Calculamos los puntos ganados y redondeamos a 1 decimal como en el reporte visual del PDF
+          const points = Number(((rawScore * weight) / 100).toFixed(1));
+
+          if (
+            nameUp.includes("PRUEBA") ||
+            nameUp.includes("EXAMEN") ||
+            nameUp.includes("SUMATIVO") ||
+            colName === "test1" ||
+            colName === "test2" ||
+            colName === "sumative_instrument"
+          ) {
+            testTotal += points;
+          } else {
+            // Tareas, Proyectos, Portafolio, etc.
+            projectsTotal += points;
+          }
+        }
+      });
+
+      // Si no se pasaron rúbricas o no coincidió ninguna (fallback de seguridad)
+      if (!matchedAny && activeRubrics.length === 0) {
+        const pScore = row.projects != null ? Number(((Number(row.projects) * 10) / 100).toFixed(1)) : 0;
+        const t1Score = row.test1 != null ? Number(((Number(row.test1) * 35) / 100).toFixed(1)) : 0;
+        const t2Score = row.test2 != null ? Number(((Number(row.test2) * 15) / 100).toFixed(1)) : 0;
+        projectsTotal = pScore;
+        testTotal = t1Score + t2Score;
       }
 
       gradesMap[sid] = {
-        projects: projectsScore,
-        test: testScore
+        projects: Number(projectsTotal.toFixed(1)),
+        test: Number(testTotal.toFixed(1))
       };
     });
 
