@@ -201,11 +201,12 @@ export default function ReportesPage({
           attendance.forEach(a => {
             if (attendanceMap[a.student_id]) {
               attendanceMap[a.student_id].total++;
-              const st = (a.status || "").toLowerCase();
+              const st = (a.status || "").toLowerCase().trim();
               if (st === "presente" || st === "p") attendanceMap[a.student_id].present++;
-              else if (st === "tardía" || st === "t") attendanceMap[a.student_id].late++;
-              else if (st === "ausente" || st === "a") attendanceMap[a.student_id].absent++;
-              else if (st === "justificada" || st === "j") attendanceMap[a.student_id].justified++;
+              else if (st === "tardía" || st === "tardia" || st === "t" || st.includes("tard")) attendanceMap[a.student_id].late++;
+              else if (st === "justificada" || st === "j" || st.includes("just")) attendanceMap[a.student_id].justified++;
+              else if (st === "ausente" || st === "a" || st.includes("aus")) attendanceMap[a.student_id].absent++;
+              else attendanceMap[a.student_id].present++;
             }
           });
 
@@ -335,12 +336,11 @@ export default function ReportesPage({
           .in("student_id", studentIds)
           .eq("period", periodToLoad);
 
-        // 2) Cargar Asistencia automática desde attendance_lessons
+        // 2) Cargar Asistencia automática desde attendance_lessons (idéntico a NotasPage)
         const { data: attData } = await supabase
           .from("attendance_lessons")
-          .select("student_id, status")
-          .in("student_id", studentIds)
-          .eq("period", periodToLoad);
+          .select("student_id, status, period")
+          .in("student_id", studentIds);
 
         const attPct: Record<number, number | null> = {};
         studentIds.forEach(id => { attPct[id] = null; });
@@ -348,11 +348,26 @@ export default function ReportesPage({
           const attCounts: Record<number, { total: number; present: number }> = {};
           studentIds.forEach(id => { attCounts[id] = { total: 0, present: 0 }; });
           attData.forEach(row => {
-            if (!attCounts[row.student_id]) attCounts[row.student_id] = { total: 0, present: 0 };
-            attCounts[row.student_id].total += 1;
-            const st = String(row.status).toUpperCase();
-            if (st === "P" || st === "PRESENTE") attCounts[row.student_id].present += 1;
-            else if (st === "T" || st.includes("TARD")) attCounts[row.student_id].present += 0.5;
+            const sid = Number(row.student_id);
+            if (!attCounts[sid]) attCounts[sid] = { total: 0, present: 0 };
+            
+            // Respetar filtro de periodo de NotasPage (incluir si period es nulo)
+            const rowPeriod = row.period ? String(row.period).toLowerCase().trim() : null;
+            if (rowPeriod && rowPeriod !== periodToLoad.toLowerCase()) return;
+
+            attCounts[sid].total += 1;
+            const st = String(row.status || "").toUpperCase().trim();
+            if (st === "P" || st === "PRESENTE") {
+              attCounts[sid].present += 1;
+            } else if (st === "T" || st === "TARDÍA" || st === "TARDIA" || st.includes("TARD")) {
+              attCounts[sid].present += 0.5;
+            } else if (st === "J" || st === "JUSTIFICADA" || st.includes("JUST")) {
+              attCounts[sid].present += 1; // En MEP la ausencia justificada no rebaja puntaje
+            } else if (st === "A" || st === "AUSENTE" || st.includes("AUS")) {
+              // Ausente: 0
+            } else {
+              attCounts[sid].present += 1;
+            }
           });
           studentIds.forEach(id => {
             const a = attCounts[id];

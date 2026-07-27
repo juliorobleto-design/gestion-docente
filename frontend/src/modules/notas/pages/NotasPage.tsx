@@ -265,12 +265,16 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         if (!attCounts[period][sid]) attCounts[period][sid] = { total: 0, present: 0 };
         
         attCounts[period][sid].total += 1;
-        const status = String(row.status).toUpperCase();
+        const status = String(row.status || "").toUpperCase().trim();
         if (status === "P" || status === "PRESENTE") {
           attCounts[period][sid].present += 1;
-        } else if (status === "T" || status === "TARDÍA" || status === "TARDIA") {
+        } else if (status === "T" || status === "TARDÍA" || status === "TARDIA" || status.includes("TARD")) {
           attCounts[period][sid].present += 0.5;
-        } else if (status === "J" || status === "JUSTIFICADA") {
+        } else if (status === "J" || status === "JUSTIFICADA" || status.includes("JUST")) {
+          attCounts[period][sid].present += 1; // Las ausencias justificadas cuentan para no rebajar puntaje
+        } else if (status === "A" || status === "AUSENTE" || status.includes("AUS")) {
+          // Ausente: 0
+        } else {
           attCounts[period][sid].present += 1;
         }
       });

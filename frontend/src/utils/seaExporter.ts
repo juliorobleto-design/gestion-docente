@@ -48,24 +48,34 @@ export async function exportToSEACSV(
     // 1. Obtener asistencia de la base de datos
     const { data: attData, error: attError } = await supabase
       .from("attendance_lessons")
-      .select("student_id, status")
-      .in("student_id", studentIds)
-      .eq("period", periodToLoad);
+      .select("student_id, status, period")
+      .in("student_id", studentIds);
 
     if (attError) throw attError;
 
-    // Calcular porcentajes de asistencia
+    // Calcular porcentajes de asistencia idéntico a NotasPage
     const attCounts: Record<number, { total: number; present: number }> = {};
     studentIds.forEach(id => { attCounts[id] = { total: 0, present: 0 }; });
     (attData || []).forEach(row => {
-      const sid = row.student_id;
+      const sid = Number(row.student_id);
       if (!attCounts[sid]) attCounts[sid] = { total: 0, present: 0 };
+      
+      // Respetar filtro de periodo de NotasPage (incluir si period es nulo)
+      const rowPeriod = row.period ? String(row.period).toLowerCase().trim() : null;
+      if (rowPeriod && rowPeriod !== periodToLoad.toLowerCase()) return;
+
       attCounts[sid].total += 1;
-      const st = String(row.status).toUpperCase();
+      const st = String(row.status || "").toUpperCase().trim();
       if (st === "P" || st === "PRESENTE") {
         attCounts[sid].present += 1;
-      } else if (st === "T" || st.includes("TARD")) {
+      } else if (st === "T" || st === "TARDÍA" || st === "TARDIA" || st.includes("TARD")) {
         attCounts[sid].present += 0.5;
+      } else if (st === "J" || st === "JUSTIFICADA" || st.includes("JUST")) {
+        attCounts[sid].present += 1; // Las ausencias justificadas no rebajan puntos en MEP
+      } else if (st === "A" || st === "AUSENTE" || st.includes("AUS")) {
+        // Ausente: 0
+      } else {
+        attCounts[sid].present += 1;
       }
     });
 
