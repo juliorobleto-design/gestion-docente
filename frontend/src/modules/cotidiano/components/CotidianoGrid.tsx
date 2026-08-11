@@ -515,6 +515,50 @@ export default function CotidianoGrid({
     }
   };
 
+  const [diagInfo, setDiagInfo] = useState<{
+    totalMain: string;
+    totalBakV3: string;
+    totalBak: string;
+    sampleMainRows: string;
+  }>({ totalMain: "cargando...", totalBakV3: "cargando...", totalBak: "cargando...", sampleMainRows: "" });
+
+  useEffect(() => {
+    const runDiagnostics = async () => {
+      if (!session?.user?.id) return;
+      try {
+        const { count: mainCount, error: mainErr } = await supabase
+          .from("daily_work_scores")
+          .select("*", { count: "exact", head: true })
+          .eq("owner_id", session.user.id);
+
+        const { count: bakV3Count, error: bakV3Err } = await supabase
+          .from("bak_daily_work_v3")
+          .select("*", { count: "exact", head: true })
+          .eq("owner_id", session.user.id);
+
+        const { count: bakCount, error: bakErr } = await supabase
+          .from("bak_daily_work")
+          .select("*", { count: "exact", head: true });
+
+        const { data: sampleRows, error: sampleErr } = await supabase
+          .from("daily_work_scores")
+          .select("student_id, period, score, matrix_cells")
+          .eq("owner_id", session.user.id)
+          .limit(5);
+
+        setDiagInfo({
+          totalMain: mainErr ? `Error: ${mainErr.message}` : String(mainCount),
+          totalBakV3: bakV3Err ? `Error: ${bakV3Err.message}` : String(bakV3Count),
+          totalBak: bakErr ? `Error: ${bakErr.message}` : String(bakCount),
+          sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : JSON.stringify(sampleRows)
+        });
+      } catch (e: any) {
+        console.error("Diag error:", e);
+      }
+    };
+    runDiagnostics();
+  }, [selectedGroupId, academicPeriod]);
+
   if (isLoading) {
     return (
       <div style={{ padding: "40px", display: "flex", justifyContent: "center", alignItems: "center", color: "#64748b" }}>
@@ -844,6 +888,13 @@ export default function CotidianoGrid({
         <div><strong>Columns Config:</strong> {JSON.stringify(columns.map(c => ({ id: c.id, name: c.name })))}</div>
         <div><strong>Global Sorted Keys (computed):</strong> {JSON.stringify(globalSortedKeys)}</div>
         <div><strong>Students with Loaded Data:</strong> {Object.keys(gridData).join(", ")}</div>
+        
+        <div style={{ marginTop: "10px", color: "#fb7185" }}><strong>--- Diagnóstico de BD Remota ---</strong></div>
+        <div><strong>Total Filas en daily_work_scores (propias):</strong> {diagInfo.totalMain}</div>
+        <div><strong>Total Filas en bak_daily_work_v3 (propias):</strong> {diagInfo.totalBakV3}</div>
+        <div><strong>Total Filas en bak_daily_work:</strong> {diagInfo.totalBak}</div>
+        <div><strong>Muestra de Filas en daily_work_scores:</strong> {diagInfo.sampleMainRows}</div>
+        
         <div style={{ marginTop: "10px" }}>
           <strong>Sample Student Data:</strong>
           {students.slice(0, 3).map(s => {
