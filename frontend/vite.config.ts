@@ -42,4 +42,22 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  build: {
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('html2canvas') || id.includes('jspdf') || id.includes('purify')) {
+              return 'vendor-libs';
+            }
+            return 'vendor';
+          }
+        }
+      }
+    }
+  }
 })
