@@ -520,7 +520,8 @@ export default function CotidianoGrid({
     totalBakV3: string;
     totalBak: string;
     sampleMainRows: string;
-  }>({ totalMain: "cargando...", totalBakV3: "cargando...", totalBak: "cargando...", sampleMainRows: "" });
+    duplicateStudents: string;
+  }>({ totalMain: "cargando...", totalBakV3: "cargando...", totalBak: "cargando...", sampleMainRows: "", duplicateStudents: "cargando..." });
 
   useEffect(() => {
     const runDiagnostics = async () => {
@@ -556,18 +557,36 @@ export default function CotidianoGrid({
           sampleStudentDetails = JSON.stringify(dbStudents);
         }
 
+        let dupInfo = "";
+        const currentCedulas = students.map(s => s.cedula).filter(Boolean);
+        if (currentCedulas.length > 0) {
+          const { data: dups, error: dupErr } = await supabase
+            .from("students")
+            .select("id, name, group_id, cedula")
+            .in("cedula", currentCedulas);
+          
+          if (dupErr) {
+            dupInfo = `Error: ${dupErr.message}`;
+          } else if (dups) {
+            dupInfo = JSON.stringify(dups.slice(0, 10));
+          }
+        } else {
+          dupInfo = "No cédulas in current students";
+        }
+
         setDiagInfo({
           totalMain: mainErr ? `Error: ${mainErr.message}` : String(mainCount),
           totalBakV3: bakV3Err ? `Error: ${bakV3Err.message}` : String(bakV3Count),
           totalBak: bakErr ? `Error: ${bakErr.message}` : String(bakCount),
-          sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : `Rows: ${JSON.stringify(sampleRows)} | Students: ${sampleStudentDetails}`
+          sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : `Rows: ${JSON.stringify(sampleRows)} | Students: ${sampleStudentDetails}`,
+          duplicateStudents: dupInfo
         });
       } catch (e: any) {
         console.error("Diag error:", e);
       }
     };
     runDiagnostics();
-  }, [selectedGroupId, academicPeriod]);
+  }, [selectedGroupId, academicPeriod, students]);
 
   if (isLoading) {
     return (
@@ -903,6 +922,7 @@ export default function CotidianoGrid({
         <div><strong>Total Filas en daily_work_scores (propias):</strong> {diagInfo.totalMain}</div>
         <div><strong>Total Filas en bak_daily_work_v3 (propias):</strong> {diagInfo.totalBakV3}</div>
         <div><strong>Total Filas en bak_daily_work:</strong> {diagInfo.totalBak}</div>
+        <div><strong>Coincidencias de Estudiantes por Cédula (hasta 10):</strong> {diagInfo.duplicateStudents}</div>
         <div><strong>Muestra de Filas en daily_work_scores:</strong> {diagInfo.sampleMainRows}</div>
         
         <div style={{ marginTop: "10px" }}>
