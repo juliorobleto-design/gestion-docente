@@ -835,6 +835,7 @@ export default function CotidianoGrid({
             </div>
           </div>
         </div>
+      )}
       {/* Debug Info Section */}
       <div style={{ margin: "20px", padding: "16px", background: "#0f172a", color: "#f8fafc", borderRadius: "12px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto" }}>
         <h4 style={{ margin: "0 0 10px 0", color: "#38bdf8" }}>🛠️ Panel de Diagnóstico de Datos</h4>
