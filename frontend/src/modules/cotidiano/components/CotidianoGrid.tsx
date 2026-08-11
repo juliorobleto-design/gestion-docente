@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Plus, Trash2, Edit2, Save, Loader2, Copy } from "lucide-react";
 import { supabase } from "../../../supabaseClient";
 import { buildStudentDisplayName } from "../../../utils/studentName";
@@ -188,6 +188,25 @@ export default function CotidianoGrid({
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [isDirty, gridData, columns]);
+  const globalSortedKeys = useMemo(() => {
+    const keysSet = new Set<string>();
+    Object.values(gridData).forEach((studentData: any) => {
+      if (studentData && typeof studentData === "object") {
+        Object.keys(studentData).forEach(k => {
+          if (k.startsWith("c")) {
+            keysSet.add(k);
+          }
+        });
+      }
+    });
+    const cellKeys = Array.from(keysSet);
+    return cellKeys.sort((a, b) => {
+      const numA = parseInt(a.replace(/\D/g, '')) || 0;
+      const numB = parseInt(b.replace(/\D/g, '')) || 0;
+      if (numA && numB) return numA - numB;
+      return a.localeCompare(b);
+    });
+  }, [gridData]);
 
   const getCellValue = (studentId: number, col: CotidianoCol): any => {
     let studentData = gridData[studentId] || gridData[String(studentId)];
@@ -214,7 +233,16 @@ export default function CotidianoGrid({
       return extractVal(studentData[col.id]);
     }
 
-    // 2. Si no existe la columna en los datos de este estudiante, retornar 0 por defecto
+    // 2. Fallback por orden/índice global (para compatibilidad con IDs viejos)
+    const colIndex = columns.findIndex(c => c.id === col.id);
+    if (colIndex >= 0 && colIndex < globalSortedKeys.length) {
+      const fallbackKey = globalSortedKeys[colIndex];
+      if (studentData[fallbackKey] !== undefined && studentData[fallbackKey] !== null) {
+        return extractVal(studentData[fallbackKey]);
+      }
+    }
+
+    // 3. Si no existe la columna en los datos de este estudiante, retornar 0 por defecto
     return 0;
   };
 
