@@ -191,20 +191,20 @@ export default function CotidianoGrid({
 
   const getCellValue = (studentId: number, col: CotidianoCol): any => {
     let studentData = gridData[studentId] || gridData[String(studentId)];
-    if (!studentData) return "";
+    if (!studentData) return 0;
 
     // Si por alguna razón los datos vienen stringificados desde la DB
     if (typeof studentData === 'string') {
-      try { studentData = JSON.parse(studentData); } catch (e) { return ""; }
+      try { studentData = JSON.parse(studentData); } catch (e) { return 0; }
     }
 
     const extractVal = (cell: any) => {
-      if (cell === undefined || cell === null) return "";
+      if (cell === undefined || cell === null) return 0;
       if (typeof cell === "object") {
         if (cell.value !== undefined && cell.value !== null) {
           return cell.value;
         }
-        return ""; // Si es un objeto vacío {}, no devolverlo para evitar crash de React
+        return 0; // Si es un objeto vacío {}, no devolverlo para evitar crash de React
       }
       return cell; // Fallback para primitivos (ej. si matrix_cells se guardó como { c1: 100 })
     };
@@ -214,27 +214,8 @@ export default function CotidianoGrid({
       return extractVal(studentData[col.id]);
     }
 
-    // 2. Fallback heurístico: emparejar por índice (cuando cambian los IDs de columnas)
-    // Extraemos todas las llaves reales (ignorando métodos del prototipo)
-    const allKeys = Object.keys(studentData).filter(k => studentData[k] !== undefined && studentData[k] !== null);
-    
-    // Filtramos solo las llaves que probablemente sean columnas (ej. 'c1', 'c1712030...')
-    const cellKeys = allKeys.filter(k => typeof k === 'string' && k.startsWith('c'));
-
-    // Ordenamos las llaves alfanuméricamente (extraemos números si los hay)
-    const sortedKeys = cellKeys.sort((a, b) => {
-      const numA = parseInt(a.replace(/\D/g, '')) || 0;
-      const numB = parseInt(b.replace(/\D/g, '')) || 0;
-      if (numA && numB) return numA - numB;
-      return a.localeCompare(b);
-    });
-
-    const colIndex = columns.findIndex(c => c.id === col.id);
-    if (colIndex >= 0 && colIndex < sortedKeys.length) {
-      return extractVal(studentData[sortedKeys[colIndex]]);
-    }
-
-    return "";
+    // 2. Si no existe la columna en los datos de este estudiante, retornar 0 por defecto
+    return 0;
   };
 
   const calculateTotal = (studentId: number) => {
