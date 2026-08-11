@@ -521,7 +521,8 @@ export default function CotidianoGrid({
     totalBak: string;
     sampleMainRows: string;
     duplicateStudents: string;
-  }>({ totalMain: "cargando...", totalBakV3: "cargando...", totalBak: "cargando...", sampleMainRows: "", duplicateStudents: "cargando..." });
+    allGroups: string;
+  }>({ totalMain: "cargando...", totalBakV3: "cargando...", totalBak: "cargando...", sampleMainRows: "", duplicateStudents: "cargando...", allGroups: "cargando..." });
 
   useEffect(() => {
     const runDiagnostics = async () => {
@@ -574,12 +575,19 @@ export default function CotidianoGrid({
           dupInfo = "No cédulas in current students";
         }
 
+        const { data: dbGroups, error: groupsErr } = await supabase
+          .from("groups")
+          .select("id, name, created_at")
+          .eq("owner_id", session.user.id);
+        const groupsInfo = groupsErr ? `Error: ${groupsErr.message}` : JSON.stringify(dbGroups);
+
         setDiagInfo({
           totalMain: mainErr ? `Error: ${mainErr.message}` : String(mainCount),
           totalBakV3: bakV3Err ? `Error: ${bakV3Err.message}` : String(bakV3Count),
           totalBak: bakErr ? `Error: ${bakErr.message}` : String(bakCount),
           sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : `Rows: ${JSON.stringify(sampleRows)} | Students: ${sampleStudentDetails}`,
-          duplicateStudents: dupInfo
+          duplicateStudents: dupInfo,
+          allGroups: groupsInfo
         });
       } catch (e: any) {
         console.error("Diag error:", e);
@@ -922,6 +930,7 @@ export default function CotidianoGrid({
         <div><strong>Total Filas en daily_work_scores (propias):</strong> {diagInfo.totalMain}</div>
         <div><strong>Total Filas en bak_daily_work_v3 (propias):</strong> {diagInfo.totalBakV3}</div>
         <div><strong>Total Filas en bak_daily_work:</strong> {diagInfo.totalBak}</div>
+        <div><strong>Lista de Grupos en DB (id, nombre):</strong> {diagInfo.allGroups}</div>
         <div><strong>Coincidencias de Estudiantes por Cédula (hasta 10):</strong> {diagInfo.duplicateStudents}</div>
         <div><strong>Muestra de Filas en daily_work_scores:</strong> {diagInfo.sampleMainRows}</div>
         
