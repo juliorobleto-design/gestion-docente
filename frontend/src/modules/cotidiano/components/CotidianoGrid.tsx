@@ -835,7 +835,26 @@ export default function CotidianoGrid({
             </div>
           </div>
         </div>
-      )}
+      {/* Debug Info Section */}
+      <div style={{ margin: "20px", padding: "16px", background: "#0f172a", color: "#f8fafc", borderRadius: "12px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto" }}>
+        <h4 style={{ margin: "0 0 10px 0", color: "#38bdf8" }}>🛠️ Panel de Diagnóstico de Datos</h4>
+        <div><strong>Academic Period:</strong> {academicPeriod}</div>
+        <div><strong>Group ID:</strong> {selectedGroupId}</div>
+        <div><strong>Columns Config:</strong> {JSON.stringify(columns.map(c => ({ id: c.id, name: c.name })))}</div>
+        <div><strong>Global Sorted Keys (computed):</strong> {JSON.stringify(globalSortedKeys)}</div>
+        <div><strong>Students with Loaded Data:</strong> {Object.keys(gridData).join(", ")}</div>
+        <div style={{ marginTop: "10px" }}>
+          <strong>Sample Student Data:</strong>
+          {students.slice(0, 3).map(s => {
+            const data = gridData[s.id] || gridData[String(s.id)];
+            return (
+              <div key={s.id} style={{ marginLeft: "10px", marginTop: "4px", borderLeft: "2px solid #38bdf8", paddingLeft: "8px" }}>
+                {s.nombre || buildStudentDisplayName(s)} (ID: {s.id}): {data ? JSON.stringify(data) : "Sin datos cargados"}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
     </div>
   );
