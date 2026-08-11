@@ -546,11 +546,21 @@ export default function CotidianoGrid({
           .eq("owner_id", session.user.id)
           .limit(5);
 
+        let sampleStudentDetails = "";
+        if (sampleRows && sampleRows.length > 0) {
+          const sampleSids = sampleRows.map(r => r.student_id);
+          const { data: dbStudents } = await supabase
+            .from("students")
+            .select("id, name, group_id, cedula")
+            .in("id", sampleSids);
+          sampleStudentDetails = JSON.stringify(dbStudents);
+        }
+
         setDiagInfo({
           totalMain: mainErr ? `Error: ${mainErr.message}` : String(mainCount),
           totalBakV3: bakV3Err ? `Error: ${bakV3Err.message}` : String(bakV3Count),
           totalBak: bakErr ? `Error: ${bakErr.message}` : String(bakCount),
-          sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : JSON.stringify(sampleRows)
+          sampleMainRows: sampleErr ? `Error: ${sampleErr.message}` : `Rows: ${JSON.stringify(sampleRows)} | Students: ${sampleStudentDetails}`
         });
       } catch (e: any) {
         console.error("Diag error:", e);
