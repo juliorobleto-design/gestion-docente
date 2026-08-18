@@ -128,6 +128,7 @@ export default function CotidianoGrid({
           if (scoresErr) {
             console.error("Error loading daily work scores:", scoresErr);
           } else if (scoresData) {
+            const loadedColumns = (configData?.columns_data || [{ id: "c1", name: "Cotidiano #1", type: "pct" }]) as CotidianoCol[];
             const newGrid: GridData = {};
             
             // Ordenar para que 'annual' se procese primero, y luego 'periodToUse' pueda sobreescribir
@@ -154,8 +155,63 @@ export default function CotidianoGrid({
                 }
               }
             });
-            console.log("Loaded GridData:", newGrid);
-            setGridData(newGrid);
+
+            // MIGRACIÓN AUTOMÁTICA: Remapear IDs viejos a IDs actuales si no coinciden
+            // Esto ocurre cuando matrix_cells fue guardado con IDs antiguos (ej: c1, c2)
+            // pero la configuración actual tiene IDs nuevos (ej: c1723456789)
+            const colIds = new Set(loadedColumns.map(c => c.id));
+            let needsMigration = false;
+
+            const migratedGrid: GridData = {};
+            for (const [sidKey, studentCells] of Object.entries(newGrid)) {
+              const sid = Number(sidKey);
+              if (!studentCells || typeof studentCells !== 'object') {
+                migratedGrid[sid] = studentCells;
+                continue;
+              }
+
+              const cellKeys = Object.keys(studentCells).filter(k => k.startsWith('c'));
+              if (cellKeys.length === 0) {
+                migratedGrid[sid] = studentCells;
+                continue;
+              }
+
+              // Verificar si alguna clave ya coincide con los IDs actuales
+              const hasMatchingKeys = cellKeys.some(k => colIds.has(k));
+
+              if (hasMatchingKeys) {
+                // Las claves ya coinciden, no necesita migración
+                migratedGrid[sid] = studentCells;
+              } else {
+                // Ninguna clave coincide: remapear por orden posicional
+                needsMigration = true;
+                const sortedOldKeys = cellKeys.sort((a, b) => {
+                  const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                  const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                  return numA - numB || a.localeCompare(b);
+                });
+
+                const remapped: { [colId: string]: CellData } = {};
+                sortedOldKeys.forEach((oldKey, index) => {
+                  if (index < loadedColumns.length) {
+                    remapped[loadedColumns[index].id] = studentCells[oldKey];
+                  }
+                });
+                migratedGrid[sid] = remapped;
+              }
+            }
+
+            if (needsMigration) {
+              console.log("[MIGRACIÓN] IDs de columna remapeados automáticamente:", migratedGrid);
+            }
+
+            setGridData(migratedGrid);
+
+            // Si hubo migración, marcar como dirty para auto-guardar con IDs correctos
+            if (needsMigration && Object.keys(migratedGrid).length > 0) {
+              console.log("[MIGRACIÓN] Auto-guardando datos con IDs corregidos...");
+              setIsDirty(true);
+            }
           }
         }
       } catch (e) {
