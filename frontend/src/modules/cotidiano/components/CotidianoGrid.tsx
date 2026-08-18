@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Edit2, Save, Loader2, Copy } from "lucide-react";
 import { supabase } from "../../../supabaseClient";
 import { buildStudentDisplayName } from "../../../utils/studentName";
@@ -151,7 +151,6 @@ export default function CotidianoGrid({
                 
                 if (!existingData || hasRealData || (!existingHasData && row.period === periodToUse)) {
                   newGrid[sid] = { ...(existingData || {}), ...(cellsObj as { [colId: string]: CellData }) };
-                  newGrid[String(sid)] = { ...(newGrid[String(sid)] || {}), ...(cellsObj as { [colId: string]: CellData }) };
                 }
               }
             });
@@ -188,62 +187,26 @@ export default function CotidianoGrid({
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [isDirty, gridData, columns]);
-  const globalSortedKeys = useMemo(() => {
-    const keysSet = new Set<string>();
-    Object.values(gridData).forEach((studentData: any) => {
-      if (studentData && typeof studentData === "object") {
-        Object.keys(studentData).forEach(k => {
-          if (k.startsWith("c")) {
-            keysSet.add(k);
-          }
-        });
-      }
-    });
-    const cellKeys = Array.from(keysSet);
-    return cellKeys.sort((a, b) => {
-      const numA = parseInt(a.replace(/\D/g, '')) || 0;
-      const numB = parseInt(b.replace(/\D/g, '')) || 0;
-      if (numA && numB) return numA - numB;
-      return a.localeCompare(b);
-    });
-  }, [gridData]);
 
   const getCellValue = (studentId: number, col: CotidianoCol): any => {
-    let studentData = gridData[studentId] || gridData[String(studentId)];
+    const studentData = gridData[studentId];
     if (!studentData) return 0;
 
-    // Si por alguna razón los datos vienen stringificados desde la DB
-    if (typeof studentData === 'string') {
-      try { studentData = JSON.parse(studentData); } catch (e) { return 0; }
-    }
+    const cell = studentData[col.id];
 
-    const extractVal = (cell: any) => {
-      if (cell === undefined || cell === null) return 0;
-      if (typeof cell === "object") {
-        if (cell.value !== undefined && cell.value !== null) {
-          return cell.value;
-        }
-        return 0; // Si es un objeto vacío {}, no devolverlo para evitar crash de React
+    // Si no existe la columna en los datos de este estudiante, retornar 0
+    if (cell === undefined || cell === null) return 0;
+
+    // Extraer valor de la celda
+    if (typeof cell === "object") {
+      if (cell.value !== undefined && cell.value !== null) {
+        return cell.value;
       }
-      return cell; // Fallback para primitivos (ej. si matrix_cells se guardó como { c1: 100 })
-    };
-
-    // 1. Buscar por ID exacto (Caso normal y feliz)
-    if (studentData[col.id] !== undefined && studentData[col.id] !== null) {
-      return extractVal(studentData[col.id]);
+      return 0;
     }
 
-    // 2. Fallback por orden/índice global (para compatibilidad con IDs viejos)
-    const colIndex = columns.findIndex(c => c.id === col.id);
-    if (colIndex >= 0 && colIndex < globalSortedKeys.length) {
-      const fallbackKey = globalSortedKeys[colIndex];
-      if (studentData[fallbackKey] !== undefined && studentData[fallbackKey] !== null) {
-        return extractVal(studentData[fallbackKey]);
-      }
-    }
-
-    // 3. Si no existe la columna en los datos de este estudiante, retornar 0 por defecto
-    return 0;
+    // Fallback para primitivos (ej. si matrix_cells se guardó como { c1: 100 })
+    return cell;
   };
 
   const calculateTotal = (studentId: number) => {
@@ -346,7 +309,7 @@ export default function CotidianoGrid({
         for (const st of students) {
           const sid = Number(st.id);
           const rowTotal = calculateTotal(sid);
-          const cells = gridData[st.id] || gridData[String(st.id)] || gridData[sid] || {};
+          const cells = gridData[sid] || {};
           
           const payload = {
             student_id: sid,
@@ -455,8 +418,7 @@ export default function CotidianoGrid({
     if (val === "") {
       setGridData(prev => ({
         ...prev,
-        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: "" } },
-        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: "" } }
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: "" } }
       }));
       setIsDirty(true);
       return;
@@ -464,8 +426,7 @@ export default function CotidianoGrid({
     if (val.includes("/")) {
       setGridData(prev => ({
         ...prev,
-        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } },
-        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: val as any } }
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } }
       }));
       setIsDirty(true);
       return;
@@ -474,8 +435,7 @@ export default function CotidianoGrid({
     if (isNaN(num)) {
       setGridData(prev => ({
         ...prev,
-        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } },
-        [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: val as any } }
+        [studentId]: { ...(prev[studentId] || {}), [colId]: { value: val as any } }
       }));
       setIsDirty(true);
       return;
@@ -483,8 +443,7 @@ export default function CotidianoGrid({
     num = Math.min(100, Math.max(0, num));
     setGridData(prev => ({
       ...prev,
-      [studentId]: { ...(prev[studentId] || {}), [colId]: { value: num } },
-      [String(studentId)]: { ...(prev[String(studentId)] || {}), [colId]: { value: num } }
+      [studentId]: { ...(prev[studentId] || {}), [colId]: { value: num } }
     }));
     setIsDirty(true);
   };
@@ -501,10 +460,6 @@ export default function CotidianoGrid({
           ...prev,
           [studentId]: {
             ...(prev[studentId] || {}),
-            [colId]: { value: pct }
-          },
-          [String(studentId)]: {
-            ...(prev[String(studentId)] || {}),
             [colId]: { value: pct }
           }
         }));
