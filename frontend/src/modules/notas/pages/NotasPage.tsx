@@ -107,9 +107,12 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
   const [lastSavedNotas, setLastSavedNotas] = useState<string | null>(null);
   const autoSaveNotasRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualGradesRef = useRef(manualGrades);
+  const isDirtyNotasRef = useRef(false);
+  const saveManualGradesRef = useRef<() => void>(() => {});
 
-  // Sync ref de manualGrades
+  // Sync refs
   useEffect(() => { manualGradesRef.current = manualGrades; }, [manualGrades]);
+  useEffect(() => { isDirtyNotasRef.current = isDirtyNotas; }, [isDirtyNotas]);
 
   // AUTO-SAVE: Guardar notas manuales 3 seg después del último cambio
   useEffect(() => {
@@ -123,6 +126,15 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
       if (autoSaveNotasRef.current) clearTimeout(autoSaveNotasRef.current);
     };
   }, [isDirtyNotas, manualGrades]);
+
+  // FLUSH al desmontar (navegar fuera del módulo Notas)
+  useEffect(() => {
+    return () => {
+      if (isDirtyNotasRef.current && Object.keys(manualGradesRef.current).length > 0) {
+        saveManualGradesRef.current();
+      }
+    };
+  }, []);
 
   // ═══════════════════════════════════════
   //  LOAD REAL DATA FROM SOURCES
@@ -223,7 +235,22 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         });
       });
 
-      setManualGrades(gradesMap);
+      // Si el usuario tiene ediciones sin guardar, mergear datos de DB con ediciones locales
+      // Las ediciones locales tienen prioridad
+      if (isDirtyNotasRef.current) {
+        const localGrades = manualGradesRef.current;
+        const merged: Record<number, Record<string, number | null>> = { ...gradesMap };
+        for (const [sid, rubrics] of Object.entries(localGrades)) {
+          const studentId = Number(sid);
+          if (!merged[studentId]) merged[studentId] = {};
+          for (const [rid, val] of Object.entries(rubrics)) {
+            merged[studentId][rid] = val as number | null;
+          }
+        }
+        setManualGrades(merged);
+      } else {
+        setManualGrades(gradesMap);
+      }
     } catch (err: any) {
       console.warn("[Notas] Error cargando notas manuales:", err?.message || err);
     } finally {
@@ -512,14 +539,17 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
 
     const currentGrades = manualGradesRef.current;
     setIsSaving(true);
+    
+    const errors: string[] = [];
+    let savedCount = 0;
+    let skippedCount = 0;
+
     try {
       for (const student of students) {
         const studentGrades = currentGrades[student.id] || {};
         
         // Construir objeto con columnas fijas
-        const updateData: Record<string, any> = {
-          updated_at: new Date().toISOString()
-        };
+        const gradeData: Record<string, any> = {};
         
         let hasData = false;
         activeRubrics.forEach(rubric => {
@@ -527,50 +557,73 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
             const score = studentGrades[rubric.id];
             const colName = rubricToColumn(rubric.name);
             if (colName && score !== null && score !== undefined) {
-              updateData[colName] = score;
+              gradeData[colName] = score;
               hasData = true;
             }
           }
         });
         
-        if (!hasData) continue;
+        if (!hasData) { skippedCount++; continue; }
 
-        // Verificar si ya existe registro para este estudiante/periodo
-        const { data: existing } = await supabase
+        gradeData.updated_at = new Date().toISOString();
+
+        // Estrategia: UPDATE primero por student_id + period
+        const { data: updated, error: updateErr } = await supabase
           .from("grades")
-          .select("id")
+          .update(gradeData)
           .eq("student_id", student.id)
           .eq("period", academicPeriod)
-          .maybeSingle();
+          .select("id");
 
-        if (existing) {
-          const { error } = await supabase
-            .from("grades")
-            .update(updateData)
-            .eq("id", existing.id);
-          if (error) console.error("Error actualizando nota:", error);
-        } else {
-          const { error } = await supabase
+        if (updateErr) {
+          errors.push(`Update s${student.id}: ${updateErr.message}`);
+          continue;
+        }
+
+        // Si UPDATE no afectó filas, hacer INSERT
+        if (!updated || updated.length === 0) {
+          const { error: insertErr } = await supabase
             .from("grades")
             .insert({
               student_id: student.id,
+              group_id: groupId,
               period: academicPeriod,
               owner_id: session.user.id,
-              ...updateData
+              ...gradeData
             });
-          if (error) console.error("Error insertando nota:", error);
+
+          if (insertErr) {
+            errors.push(`Insert s${student.id}: ${insertErr.message}`);
+            console.error("[Notas SAVE] Insert falló:", { student_id: student.id, gradeData, error: insertErr });
+          } else {
+            savedCount++;
+          }
+        } else {
+          savedCount++;
         }
+      }
+
+      // Diagnóstico
+      console.log(`[Notas SAVE] guardados: ${savedCount}, omitidos: ${skippedCount}, errores: ${errors.length}`);
+
+      if (errors.length > 0) {
+        const errorMsg = errors.join(" | ");
+        console.error("[Notas SAVE] Errores:", errorMsg);
+        setToast({ message: `Error guardando ${errors.length} nota(s): ${errors[0]}`, type: "error" });
       }
 
       setIsDirtyNotas(false);
       setLastSavedNotas(new Date().toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" }));
-    } catch (err) {
-      console.error("Error saving grades:", err);
-      setToast({ message: "Error al guardar las notas", type: "error" });
+    } catch (err: any) {
+      console.error("[Notas SAVE] Error fatal:", err);
+      setToast({ message: `Error al guardar las notas: ${err?.message || err}`, type: "error" });
     } finally {
       setIsSaving(false);
     }
   };
+
+  // Mantener ref sincronizado para el flush al desmontar
+  saveManualGradesRef.current = saveManualGrades;
 
   // ═══════════════════════════════════════
   //  GRADE ACCESS
@@ -603,14 +656,19 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
 
     const parsed = finalValue === "" ? null : parseFloat(finalValue);
     const clamped = parsed !== null ? Math.min(100, Math.max(0, parsed)) : null;
+    const sanitized = isNaN(clamped as number) ? null : clamped;
 
-    setManualGrades(prev => ({
-      ...prev,
+    // Actualizar ref inmediatamente (síncrono) para que saveManualGrades siempre lea datos frescos
+    const newGrades = {
+      ...manualGradesRef.current,
       [studentId]: {
-        ...(prev[studentId] || {}),
-        [rubricId]: isNaN(clamped as number) ? null : clamped,
+        ...(manualGradesRef.current[studentId] || {}),
+        [rubricId]: sanitized,
       },
-    }));
+    };
+    manualGradesRef.current = newGrades;
+
+    setManualGrades(newGrades);
     setIsDirtyNotas(true);
   }
 
