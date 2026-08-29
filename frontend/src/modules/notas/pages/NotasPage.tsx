@@ -586,7 +586,6 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
             .from("grades")
             .insert({
               student_id: student.id,
-              group_id: groupId,
               period: academicPeriod,
               owner_id: session.user.id,
               ...gradeData
