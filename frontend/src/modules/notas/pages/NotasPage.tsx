@@ -566,13 +566,13 @@ export default function NotasPage({ evaluationRubrics, students, groupName, grou
         if (!hasData) { skippedCount++; continue; }
 
         gradeData.updated_at = new Date().toISOString();
+        gradeData.period = academicPeriod;
 
-        // Estrategia: UPDATE primero por student_id + period
+        // Estrategia: UPDATE primero por student_id (constraint UNIQUE es solo student_id)
         const { data: updated, error: updateErr } = await supabase
           .from("grades")
           .update(gradeData)
           .eq("student_id", student.id)
-          .eq("period", academicPeriod)
           .select("id");
 
         if (updateErr) {
